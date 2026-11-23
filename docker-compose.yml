@@ -1,0 +1,70 @@
+# AçoKey Q — produção no system-lab (Ubuntu ARM64), atrás do nginx do servidor.
+# Uso: docker compose up -d --build   (o site fica em 127.0.0.1:${WEB_PORTA:-8093}; o nginx do host faz o HTTPS)
+name: acokeyq
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: America/Sao_Paulo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+    networks: [interna]
+    # Sem "ports": o banco NÃO é exposto fora da VM.
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: America/Sao_Paulo
+      ARQUIVOS_DIR: /dados/arquivos
+    depends_on:
+      db:
+        condition: service_healthy
+    # Sistema de arquivos só de leitura: a API só grava no volume de arquivos e em /tmp
+    read_only: true
+    tmpfs: ["/tmp"]
+    volumes:
+      - arquivos:/dados/arquivos
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    networks: [interna]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/saude').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WEB_PORTA:-8093}:80"
+    depends_on: [api]
+    # Só as capacidades que o nginx precisa para abrir a porta 80 e trocar para o usuário dele
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "SETGID", "SETUID", "NET_BIND_SERVICE"]
+    security_opt: ["no-new-privileges:true"]
+    networks: [interna]
+
+volumes:
+  pgdata:
+  # Anexos dos lotes, certificados de matéria-prima, fotos, assinaturas e databooks.
+  # Entra no backup diário junto com o banco (deploy/backup/backup.sh).
+  arquivos:
+
+networks:
+  interna:

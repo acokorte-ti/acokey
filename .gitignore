@@ -1,0 +1,50 @@
+# Dados reais NUNCA entram no repositório (banco, anexos, planilhas, PDFs, assinaturas, databooks)
+dados_dev/
+carga/
+*.db
+*.xlsx
+*.xlsm
+*.xlsb
+*.xls
+*.ods
+*.csv
+*.zip
+*.dump
+*.sql
+*.sql.gz*
+*.gpg
+*.log
+*.cfg
+
+# Sistema antigo (Flask) inteiro: fica só na máquina local, FORA do repositório (que é público).
+# Tem dados reais da fábrica (banco, anexos, databooks, planilhas, assinaturas) e, no código e na
+# documentação, o nome e os contatos do cliente final.
+legado/
+
+# Segredos
+.env
+.env.*
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Editor / SO
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Claude Code (configuração local)
+.claude/

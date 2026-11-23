@@ -1,0 +1,8 @@
+# O servidor é Linux: tudo é gravado no repositório com fim de linha LF,
+# mesmo quando editado no Windows (scripts .sh com CRLF não rodam).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
