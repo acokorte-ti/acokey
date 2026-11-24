@@ -14,9 +14,10 @@ O que mudou em relação ao antigo:
   (no antigo era a senha administrativa compartilhada).
 - O lote se liga à corrida pelo id da matéria-prima. O texto da corrida só vale para lotes antigos sem esse vínculo.
 """
+import logging
 import re
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -26,7 +27,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import false, func, or_, select
 from sqlalchemy.orm import Session
 
-from app import arquivos, fluxo
+from app import arquivos, fluxo, mega
 from app.arquivos import DOCUMENTOS, resposta_arquivo, salvar_upload
 from app.carimbo import ErroCarimbo, carimbar_pdf
 from app.config import agora_local
@@ -235,7 +236,7 @@ def listar(_: Contexto = Depends(QUALIDADE), db: Session = Depends(get_db)) -> d
         item["lotes_usando"] = len(usando)
         item["tem_carimbado"] = mp.id in carimbadas
         itens.append(item)
-    return {"itens": itens, "fornecedores": _fornecedores_sugeridos(db, mps)}
+    return {"itens": itens, "fornecedores": _fornecedores_sugeridos(db, mps), "mega": mega.situacao()[0]}
 
 
 def _fornecedores_sugeridos(db: Session, mps: list[MateriaPrima]) -> list[dict]:
@@ -265,6 +266,22 @@ def opcoes(tipo: str | None = None, _: Contexto = Depends(QUALQUER), db: Session
         c = calcular(mp, sum(lote.qtd for lote in lotes.de(mp)))
         saida.append({k: c[k] for k in ("id", "corrida", "nf_entrada", "fornecedor", "tipo_destino", "status", "qt_saldo")})
     return saida
+
+
+@rota.get("/materia-prima/entradas-mega")
+def entradas_mega(dias: int = 365, _: Contexto = Depends(QUALIDADE), db: Session = Depends(get_db)) -> dict:
+    """Entradas de peças fundidas no Mega (só leitura, na hora), com o que já foi lançado de cada uma. Ajuda a lançar
+    a corrida: NF, fornecedor, data, tipo e quantidade vêm da nota; a corrida vem do certificado."""
+    pronto, motivo = mega.situacao()
+    if not pronto:
+        raise HTTPException(409, motivo)
+    desde = agora_local().date() - timedelta(days=max(1, min(dias, 3650)))
+    try:
+        entradas = mega.montar_entradas(mega.ler_entradas(desde))
+    except Exception as erro:  # noqa: BLE001 — a falha vira mensagem na tela; o detalhe fica no log
+        logging.getLogger("uvicorn.error").exception("Falha ao ler as entradas de matéria-prima no Mega")
+        raise HTTPException(502, f"Não foi possível consultar o Mega: {mega.mensagem_para_tela(erro, 'falha na consulta')}") from None
+    return {"desde": desde, "entradas": mega.entradas_para_tela(db, entradas)}
 
 
 @rota.get("/materia-prima/{mp_id}")

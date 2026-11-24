@@ -57,6 +57,29 @@ export interface SugestaoFornecedor {
 export interface ListaCorridas {
   itens: CorridaNaLista[];
   fornecedores: SugestaoFornecedor[];
+  /** A busca no Mega está ligada no servidor (mostra o botão "Buscar no Mega"). */
+  mega: boolean;
+}
+
+/** Item de nota de entrada de peças fundidas lido no Mega, com o que já foi lançado aqui. */
+export interface EntradaMega {
+  chave: string;
+  nf: string;
+  /** Data de entrada no Mega (AAAA-MM-DD): é a data de recebimento da corrida. */
+  entrada: string | null;
+  emissao: string | null;
+  /** Razão social no Mega. */
+  fornecedor: string;
+  /** Nome que a Qualidade já usa para esse fornecedor (ou o código do cadastro). */
+  fornecedor_sugerido: string;
+  descricao: string;
+  tipo: TipoLote | null;
+  unidade: string;
+  qtde: number | null;
+  /** Soma da QT-FUND. das corridas já lançadas com a mesma NF, data e tipo. */
+  lancado: number;
+  falta: number;
+  corridas: { id: number; corrida: string }[];
 }
 
 export interface AnexoCorrida {

@@ -195,3 +195,74 @@ def test_rotas_da_busca_no_mega(como, monkeypatch):
     monkeypatch.setattr(mega, "aplicar", lambda db, ops, itens: (_ for _ in ()).throw(ValueError("detalhe interno")))
     r = cadastros.post("/api/ordens-producao/buscar-mega", headers=h)
     assert r.status_code == 502 and "detalhe interno" not in r.json()["detail"] and "log do servidor" in r.json()["detail"]
+
+
+# ---------------------------------------------------------------- entradas de matéria-prima (consulta simulada)
+
+from datetime import date  # noqa: E402
+
+from app.models import FornecedorMP, MateriaPrima  # noqa: E402
+
+
+def _entrada(nf="70001", fornecedor=901, nome="FUNDICAO EXEMPLO LTDA", entrada=datetime(2026, 10, 5), seq=1,
+             desc="CHAVETA PIN FUNDIDA", qtde=300.0, emissao=datetime(2026, 10, 2)):
+    return {"NF": nf, "ENTRADA": entrada, "EMISSAO": emissao, "FORNECEDOR_CODIGO": fornecedor, "FORNECEDOR": nome,
+            "FORNECEDOR_FANTASIA": "FUNDEX", "SEQ_ITEM": seq, "PRODUTO": 9101, "DESCRICAO": desc, "UNIDADE": "UN",
+            "QTDE": qtde}  # fmt: skip
+
+
+def test_entradas_cruzam_com_o_que_ja_foi_lancado_e_sugerem_o_fornecedor(db):
+    db.add(FornecedorMP(codigo="FDX", razao_social="Fundição Outra Ltda"))
+    db.add(FornecedorMP(codigo="FOUT", razao_social="FUNDICAO SEM APELIDO LTDA"))
+    db.add(MateriaPrima(nf_entrada="070001", corrida="M999/26", fornecedor="FUNDEX", tipo_destino="PIN",
+                        data_recebimento=date(2026, 10, 5), qt_fund=120))  # fmt: skip
+    db.add(MateriaPrima(nf_entrada="70001", corrida="M998/26", fornecedor="FUNDEX", tipo_destino="PIN",
+                        data_recebimento=date(2026, 10, 5), qt_fund=80, cancelado_em=datetime(2026, 10, 6)))  # cancelada: não conta
+    db.commit()
+    entradas = mega.montar_entradas([
+        _entrada(), _entrada(),  # linha repetida
+        _entrada(nf="70001", fornecedor=902, nome="FUNDICAO SEM APELIDO LTDA", desc="CHAVETA BOX FUNDIDA"),  # mesmo nº, outro fornecedor
+        _entrada(nf="70002", seq=1, desc="CHAVETA ARK FUNDIDA", qtde=50, entrada=datetime(2026, 11, 1)),
+    ])  # fmt: skip
+    assert len(entradas) == 3
+    tela = mega.entradas_para_tela(db, entradas)
+    assert [e["nf"] for e in tela] == ["70002", "70001", "70001"]  # mais recentes primeiro
+    pin = next(e for e in tela if e["tipo"] == "PIN")
+    assert (pin["qtde"], pin["lancado"], pin["falta"]) == (300, 120, 180) and [c["corrida"] for c in pin["corridas"]] == ["M999/26"]
+    assert pin["fornecedor"] == "FUNDICAO EXEMPLO LTDA" and pin["fornecedor_sugerido"] == "FUNDEX"  # o apelido já usado
+    box = next(e for e in tela if e["tipo"] == "BOX")
+    assert box["lancado"] == 0 and box["fornecedor_sugerido"] == "FOUT"  # sem apelido: o código do cadastro
+    ark = next(e for e in tela if e["tipo"] == "ARK")
+    assert ark["falta"] == 50 and ark["fornecedor_sugerido"] == "FUNDEX"  # o mesmo fornecedor do Mega da NF 70001
+
+
+def test_consulta_das_entradas_usa_a_nota_inteira_e_parametros():
+    sql, parametros_sql = mega.consulta_entradas(date(2026, 1, 1))
+    assert "i.AGN_IN_CODIGO = r.AGN_IN_CODIGO" in sql and "i.RCB_ST_NOTA = r.RCB_ST_NOTA" in sql
+    assert parametros_sql["fundido"] == "%FUNDID%" and parametros_sql["filial"] == 3
+    assert parametros_sql["desde"] == datetime(2026, 1, 1)
+
+
+def test_rota_das_entradas_do_mega(como, monkeypatch):
+    qualidade, _ = como(modulos=["qualidade"])
+    cadastros, _ = como(modulos=["cadastros"])
+    assert cadastros.get("/api/materia-prima/entradas-mega").status_code == 403
+    assert qualidade.get("/api/materia-prima").json()["mega"] is False
+    r = qualidade.get("/api/materia-prima/entradas-mega")
+    assert r.status_code == 409 and "desligada" in r.json()["detail"]
+    monkeypatch.setattr(mega, "situacao", lambda: (True, ""))
+    pedidos = []
+    monkeypatch.setattr(mega, "ler_entradas", lambda desde: pedidos.append(desde) or [_entrada()])
+    assert qualidade.get("/api/materia-prima").json()["mega"] is True
+    r = qualidade.get("/api/materia-prima/entradas-mega?dias=30")
+    assert r.status_code == 200, r.text
+    entrada = r.json()["entradas"][0]
+    assert entrada["nf"] == "70001" and entrada["entrada"] == "2026-10-05" and entrada["falta"] == 300
+    assert (date.today() - pedidos[-1]).days in (29, 30, 31)
+
+    def quebra(desde):
+        raise RuntimeError("ORA-00942: table or view does not exist")
+
+    monkeypatch.setattr(mega, "ler_entradas", quebra)
+    r = qualidade.get("/api/materia-prima/entradas-mega")
+    assert r.status_code == 502 and "ORA-00942" in r.json()["detail"]

@@ -52,11 +52,38 @@ sistema antigo (só contagens; nenhum dado real no repositório):
 - Situação das notas ligadas: `NOT_CH_SITUACAO` L (129 vínculos) e N (23); nota cancelada é descartada por
   `NOT_DT_CANCELAMENTO`.
 
-## Matéria-prima (a mapear)
+## Matéria-prima (entrada das peças fundidas)
 
-NF de entrada e fornecedor: `EST_RECEBIMENTO` / `EST_ITENSRECEB` + `GLO_AGENTES` (mapeados nos Indicadores de
-Manutenção). Falta confirmar como a entrada das peças fundidas aparece (produto, quantidade) e se a corrida existe
-no Mega (provavelmente só no certificado).
+Uso: botão "Buscar no Mega" da tela Matéria-prima (`GET /api/materia-prima/entradas-mega`, `mega.consulta_entradas`),
+lido na hora, sem cópia local. Conferido na produção em 24/11/2026: 22 itens de 14 notas nos últimos 12 meses.
+
+Mapeado em 24/11/2026 com as tabelas já liberadas, comparando com os registros de matéria-prima do sistema antigo
+(amostra pequena: 4 registros de 2 notas; só contagens):
+
+| Dado da tela Matéria-prima | Mega | Validação |
+|---|---|---|
+| NF de entrada | `EST_RECEBIMENTO.RCB_ST_NOTA` (filial `FIL_IN_CODIGO = 3`) | 2/2 notas. O número **repete entre fornecedores**: a busca tem de usar a nota inteira (chave com o fornecedor), nunca só o número |
+| Data de recebimento | `EST_RECEBIMENTO.RCB_DT_MOVIMENTO` (data de entrada) | 4/4 (a data de emissão `RCB_DT_DOCUMENTO` bateu só em 3/4) |
+| Fornecedor | `GLO_AGENTES.AGN_ST_NOME` pelo `AGN_*` da nota | o sistema antigo usava um apelido que não existe no Mega: a razão social é outra |
+| Peça e tipo PIN/BOX/ARK | `EST_ITENSRECEB.PRO_IN_CODIGO` → `EST_PRODUTOS.PRO_ST_DESCRICAO` (descrição com "FUNDID" e PIN/BOX/ARK) | tipo igual ao "tipo destino" em 4/4 |
+| Quantidade fundida | `EST_ITENSRECEB.RCI_RE_QUANTIDADE` | igual em 2/2 notas; quando a nota traz várias corridas, a soma das corridas dá a quantidade da nota |
+| **Corrida** | **não existe no Mega** (ver abaixo): continua sendo digitada a partir do certificado do fornecedor | 0/4 |
+
+Entradas de peças fundidas na filial 3 desde 2025: 17 notas (27 itens), 2 fornecedores, 4 produtos, todas com
+tipo de documento 7 e aplicação 4. Os produtos fundidos estão marcados para **controlar lotes**
+(`EST_PRODUTOS.PRO_BO_CONTROLALOTES = 'S'` em 10 de 11 cadastros e em 27/27 entradas), então procuramos a corrida
+nas tabelas de lote (liberadas só para isso e depois revogadas):
+
+- `EST_LOTESMOVIMENTO` (`MVL_ST_LOTEFORNE`, ligada à entrada por `EST_MOVIMENTO`: `MVT_IN_LANCAM`, tipo de movimento 1,
+  `MVT_ST_NUMDOC` = NF): as 27 entradas têm lote, 1 por item, com a quantidade do item; mas o "lote do fornecedor"
+  é o **número da NF** em 24 de 27 (5 dígitos, nunca o formato da corrida), e `MVL_ST_REFERENCIA` é "*" ou um código
+  interno. Nenhuma das 4 corridas do sistema antigo aparece.
+- `EST_LOTERECEBXML` (lotes do XML da NF-e, ligado por `RCB_ST_CHAVEACESSO`): nenhum lote nessas notas.
+- `EST_LOTESINSPECAODET` (inspeção de recebimento): tabela vazia; a inspeção do Mega não é usada.
+
+Conclusão: o Mega dá NF, data, fornecedor, peça/tipo e quantidade de cada entrada de peças fundidas; a corrida só
+existe no certificado. Ela viria sozinha se o recebimento lançasse a corrida como "lote do fornecedor" na entrada
+(decisão de processo, fora do sistema); aí bastaria liberar de novo `EST_LOTESMOVIMENTO` e `EST_MOVIMENTO`.
 
 ## Permissões
 

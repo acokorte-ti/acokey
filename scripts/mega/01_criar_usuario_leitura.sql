@@ -46,6 +46,15 @@ GRANT SELECT ON ACOKORTE.VEN_ITEMPEDIDOVENDA      TO acokey_ro;  -- item do pedi
 GRANT SELECT ON ACOKORTE.VEN_ITEMPEDI_VEN_ITEMNOT TO acokey_ro;  -- vínculo item do pedido x item da nota
 GRANT SELECT ON ACOKORTE.VEN_ITEMNOTAFISCAL       TO acokey_ro;  -- item da nota fiscal de saída
 GRANT SELECT ON ACOKORTE.VEN_NOTAFISCAL           TO acokey_ro;  -- nota fiscal de saída: número, data, situação
+--    Matéria-prima: as tabelas de lote abaixo foram liberadas em 24/11/2026 só para procurar a corrida e devem ser
+--    revogadas. O Mega não guarda a corrida das peças fundidas: o "lote do fornecedor" da entrada é o número da NF
+--    (EST_LOTESMOVIMENTO), o XML da NF-e não traz lote (EST_LOTERECEBXML) e a inspeção de recebimento não é usada
+--    (EST_LOTESINSPECAODET, vazia). Se o recebimento passar a lançar a corrida como lote do fornecedor, liberar de
+--    novo EST_LOTESMOVIMENTO e EST_MOVIMENTO (o movimento de entrada liga a nota ao lote por MVT_IN_LANCAM).
+-- REVOKE SELECT ON ACOKORTE.EST_LOTESMOVIMENTO   FROM acokey_ro;
+-- REVOKE SELECT ON ACOKORTE.EST_LOTERECEBXML     FROM acokey_ro;
+-- REVOKE SELECT ON ACOKORTE.EST_MOVIMENTO        FROM acokey_ro;
+-- REVOKE SELECT ON ACOKORTE.EST_LOTESINSPECAODET FROM acokey_ro;  (já revogada)
 
 -- D) Encerrar o mapeamento: tira a leitura ampla do bloco B. Rodar logo depois do bloco C.
 -- REVOKE SELECT ANY TABLE      FROM acokey_ro;

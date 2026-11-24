@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Campo } from '../../componentes/Campo';
 import { ModalFormulario } from '../../componentes/Modal';
 import { mensagemDeErro } from '../../lib/api';
@@ -114,13 +114,15 @@ interface PropsModal {
   /** Quem fica registrado como responsável (o usuário logado). */
   responsavel?: string;
   rotuloEnviar: string;
+  /** Aviso no topo do formulário (ex.: dados que vieram do Mega). */
+  aviso?: ReactNode;
   aoFechar: () => void;
   /** Grava; se der erro, a mensagem aparece no formulário. */
   aoGravar: (corpo: CorridaEntrada) => Promise<void>;
 }
 
 /** Formulário da corrida (lançar e editar), com os percentuais calculados enquanto se digita. */
-export function ModalCorrida({ titulo, inicial, novo, fornecedores, responsavel, rotuloEnviar, aoFechar, aoGravar }: PropsModal) {
+export function ModalCorrida({ titulo, inicial, novo, fornecedores, responsavel, rotuloEnviar, aviso, aoFechar, aoGravar }: PropsModal) {
   const [f, setF] = useState<FormularioCorrida>(inicial);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -141,6 +143,7 @@ export function ModalCorrida({ titulo, inicial, novo, fornecedores, responsavel,
   return (
     <ModalFormulario titulo={titulo} largura="larga" aoFechar={aoFechar} aoEnviar={() => void enviar()} enviando={enviando} erro={erro}
       rotuloEnviar={rotuloEnviar}>
+      {aviso}
       <div className="form-grade">
         <Campo rotulo="NF de entrada" para="mp-nf" obrigatorio={novo}>
           <input id="mp-nf" type="text" required={novo} maxLength={40} value={f.nf_entrada} onChange={(e) => mudar({ nf_entrada: e.target.value })} />

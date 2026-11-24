@@ -18,7 +18,7 @@ nomes do cliente e de funcionários). Ver `.gitignore` e o aviso no topo do `CLA
 | 3. Qualidade | Não conformidades (4 disposições, correção de dureza), especificações, verificação dimensional RIP-33A | **pronta** |
 | 4. Relatórios e databook | Dureza RIP-35, Tratamento Térmico (por carga), Visual, databook (capa, índice, anexos), conferência, controle "Enviado-DB" | **pronta** |
 | 5. Demais módulos | Matéria-prima (carimbo e propagação), cadastros, ordens de produção (importação da planilha), parâmetros, assinaturas, cargas de TT, envios a prestador (PDF e modelo do laboratório), ordem de faturamento, início, painel com alertas, dashboard, Gantt, KPIs, indicadores, busca (Ctrl+K), exportações Excel | **pronta** |
-| 6. Mega | Busca das OPs (com pedido, PO e notas de saída) no ERP; falta a NF de entrada da matéria-prima | OPs **prontas**, a ligar na produção |
+| 6. Mega | Busca das OPs (com pedido, PO e notas de saída) e das entradas de peças fundidas no ERP | **pronta** (ligada na produção) |
 | 7. Visita guiada e manual | Tutorial por tela (o antigo tinha 25) e manual do usuário | a fazer |
 | 8. Virada | Homologação no system-lab, carga final dos dados reais, desligamento do notebook | a fazer |
 
@@ -225,7 +225,9 @@ Ligar: `MEGA_HABILITADO=true` no `.env` do servidor e `docker compose up -d api`
 busca, o DBA roda o bloco D de `scripts/mega/01_criar_usuario_leitura.sql` (tira a leitura ampla do mapeamento) e
 o `testar` acima confirma "Somente leitura".
 
-Falta: fornecedor e NF de entrada da matéria-prima (`EST_RECEBIMENTO` / `EST_ITENSRECEB`, já liberadas no bloco C).
+**Matéria-prima** (botão "Buscar no Mega" na tela Matéria-prima): lê na hora as entradas de peças fundidas dos
+últimos 12 meses, mostra o que já foi lançado de cada nota e abre o formulário com NF, fornecedor, data, tipo e
+QT-FUND. preenchidos. A corrida não existe no Mega: é digitada a partir do certificado.
 
 Socorro, quando ninguém consegue entrar:
 

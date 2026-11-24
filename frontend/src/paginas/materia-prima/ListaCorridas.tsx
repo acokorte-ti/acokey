@@ -9,8 +9,9 @@ import { contemTermos, inteiro, TRACO } from '../../lib/formato';
 import { useUsuario } from '../../lib/sessao';
 import { useCarga } from '../../lib/useCarga';
 import { porcento, tomRefugo, tomRetrabalho, tomSaldo } from './calculos';
-import { formularioVazio, ModalCorrida } from './FormCorrida';
-import type { CorridaNaLista, ListaCorridas as Lista, RespostaMensagem, StatusCorrida } from './tipos';
+import { EntradasMega } from './EntradasMega';
+import { formularioVazio, ModalCorrida, type FormularioCorrida } from './FormCorrida';
+import type { CorridaNaLista, EntradaMega, ListaCorridas as Lista, RespostaMensagem, StatusCorrida } from './tipos';
 
 const STATUS: Record<StatusCorrida, { rotulo: string; classe: string }> = {
   pendente: { rotulo: 'Pendente', classe: 'selo-alerta' },
@@ -33,6 +34,22 @@ export function SeloCarimbado() {
 
 type FiltroTipo = '' | 'PIN' | 'BOX' | 'ARK';
 
+/** Formulário de lançamento já preenchido com o que veio da nota de entrada no Mega (falta só a corrida). */
+function daEntrada(e: EntradaMega): { titulo: string; inicial: FormularioCorrida; doMega: boolean } {
+  return {
+    titulo: `Lançar corrida da NF ${e.nf}`,
+    inicial: {
+      ...formularioVazio(),
+      nf_entrada: e.nf,
+      fornecedor: e.fornecedor_sugerido,
+      tipo_destino: e.tipo ?? '',
+      data_recebimento: e.entrada ?? formularioVazio().data_recebimento,
+      qt_fund: String(e.falta),
+    },
+    doMega: true,
+  };
+}
+
 export function ListaCorridas() {
   const eu = useUsuario();
   const avisos = useAvisos();
@@ -41,7 +58,8 @@ export function ListaCorridas() {
   const [busca, setBusca] = useState('');
   const [tipo, setTipo] = useState<FiltroTipo>('');
   const [status, setStatus] = useState<'' | StatusCorrida>('');
-  const [lancando, setLancando] = useState(false);
+  const [lancando, setLancando] = useState<{ titulo: string; inicial: FormularioCorrida; doMega: boolean } | null>(null);
+  const [vendoMega, setVendoMega] = useState(false);
 
   const filtradas = useMemo(
     () =>
@@ -141,10 +159,18 @@ export function ListaCorridas() {
         <Link className="botao" to="/indicadores">
           Indicadores de refugo/retrabalho
         </Link>
-        <button type="button" className="botao botao-primario" onClick={() => setLancando(true)}>
+        {lista.dados?.mega && (
+          <button type="button" className="botao" onClick={() => setVendoMega(true)} disabled={vendoMega}>
+            Buscar no Mega
+          </button>
+        )}
+        <button type="button" className="botao botao-primario"
+          onClick={() => setLancando({ titulo: 'Lançar corrida de matéria-prima', inicial: formularioVazio(), doMega: false })}>
           Lançar corrida
         </button>
       </Cabecalho>
+
+      {vendoMega && <EntradasMega aoFechar={() => setVendoMega(false)} aoLancar={(e) => setLancando(daEntrada(e))} />}
 
       <Faixa tipo="alerta" papel="note">
         <strong>Certificado de qualidade:</strong> anexe na corrida o PDF do fornecedor e, depois da análise da Qualidade, use
@@ -204,17 +230,25 @@ export function ListaCorridas() {
 
       {lancando && (
         <ModalCorrida
-          titulo="Lançar corrida de matéria-prima"
-          inicial={formularioVazio()}
+          titulo={lancando.titulo}
+          inicial={lancando.inicial}
+          aviso={
+            lancando.doMega && (
+              <Faixa tipo="info" papel="note">
+                NF, fornecedor, data, tipo e QT-FUND. vieram da nota de entrada no Mega: confira. Digite a <strong>corrida</strong> do
+                certificado. Se a nota tiver mais de uma corrida, ajuste a QT-FUND. para a desta corrida e lance as outras depois.
+              </Faixa>
+            )
+          }
           novo
           fornecedores={lista.dados?.fornecedores ?? []}
           responsavel={eu.nome}
           rotuloEnviar="Lançar corrida"
-          aoFechar={() => setLancando(false)}
+          aoFechar={() => setLancando(null)}
           aoGravar={async (corpo) => {
             const r = await api<RespostaMensagem & { id: number }>('/materia-prima', { metodo: 'POST', corpo });
             avisos.sucesso(r.mensagem);
-            setLancando(false);
+            setLancando(null);
             navegar(`/materia-prima/${r.id}`);
           }}
         />

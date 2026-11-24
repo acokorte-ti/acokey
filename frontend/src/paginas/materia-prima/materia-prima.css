@@ -263,3 +263,25 @@
 .mp-form-lote {
   margin-top: 10px;
 }
+
+/* ---- entradas de peças fundidas no Mega */
+
+.mp-mega {
+  margin-bottom: 16px;
+}
+
+.mp-mega-todas {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+  font-size: 14px;
+}
+
+.mp-mega-peca {
+  display: inline-block;
+  min-width: 160px;
+  max-width: 280px;
+  font-size: 13px;
+  overflow-wrap: break-word;
+}

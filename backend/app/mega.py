@@ -10,8 +10,9 @@ Padrão dos sistemas internos (o mesmo do EstoqueACK e dos Indicadores de Manute
 - A senha vai direto para o .env do servidor por `deploy/configurar_mega.sh`; nunca para o repositório ou conversa.
 
 O que vem do Mega hoje: as ORDENS DE PRODUÇÃO das chavetas (antiga planilha "Cadastro_Lote_*.xlsx") e, como
-referência, o pedido de origem, o cliente, o pedido do cliente (PO) e as notas fiscais de saída. Mapeamento e
-validação: docs/integracao_mega.md. Falta mapear a entrada de matéria-prima (NF de entrada e fornecedor da corrida).
+referência, o pedido de origem, o cliente, o pedido do cliente (PO) e as notas fiscais de saída; e as ENTRADAS de
+peças fundidas (NF, data, fornecedor, peça e quantidade), lidas na hora para ajudar a lançar a corrida na tela
+Matéria-prima. A corrida não existe no Mega. Mapeamento e validação: docs/integracao_mega.md.
 
 Regras da busca (24/11/2026, depois de comparar com a planilha de OPs do sistema antigo):
 - Só OPs da filial MEGA_FILIAL abertas desde MEGA_OPS_DESDE, de item de chaveta: item já cadastrado aqui ou
@@ -32,7 +33,7 @@ import re
 import threading
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -40,7 +41,7 @@ from sqlalchemy.orm import Session
 
 from app import parametros
 from app.config import config
-from app.models import Auditoria, OrdemProducao
+from app.models import Auditoria, FornecedorMP, MateriaPrima, OrdemProducao
 from app.ordens_producao import TAMANHOS, classificar
 from app.seguranca import Contexto, auditar
 
@@ -438,12 +439,18 @@ def sincronizar(db: Session, ctx: Contexto | None = None, simular: bool = False)
     return resumo
 
 
+def mensagem_para_tela(erro: Exception, o_que: str = "falha ao gravar as OPs lidas") -> str:
+    """Código e texto do Oracle, o motivo de MegaIndisponivel ou uma frase genérica (o detalhe fica no log)."""
+    mensagem = _mensagem_publica(erro)
+    if not re.match(r"(ORA|DPI|DPY)-", mensagem) and not isinstance(erro, MegaIndisponivel):
+        mensagem = f"{o_que} (o detalhe está no log do servidor)"
+    return mensagem
+
+
 def registrar_falha(db: Session, ctx: Contexto | None, erro: Exception) -> str:
     """Desfaz o que estava pela metade e deixa a falha na auditoria. Devolve a mensagem para a tela."""
     db.rollback()
-    mensagem = _mensagem_publica(erro)
-    if not re.match(r"(ORA|DPI|DPY)-", mensagem) and not isinstance(erro, MegaIndisponivel):
-        mensagem = "falha ao gravar as OPs lidas (o detalhe está no log do servidor)"
+    mensagem = mensagem_para_tela(erro)
     auditar(db, ctx, ACAO_AUDITORIA, "ordens_producao", None, {"erro": mensagem}, login="(agendador)")
     db.commit()
     return mensagem
@@ -460,6 +467,119 @@ def ultima_busca(db: Session) -> dict | None:
         "atualizadas": detalhes.get("atualizadas"), "divergentes": detalhes.get("divergentes"),
         "ops_divergentes": sorted(detalhes.get("ops_divergentes") or {}),
     }  # fmt: skip
+
+
+# ---------------------------------------------------------------- entradas de matéria-prima (peças fundidas)
+
+# A peça fundida tem "FUNDID" e o tipo (PIN, BOX ou ARK) na descrição do produto (validado em 24/11/2026: 4 produtos,
+# 27 entradas desde 2025, tipo igual ao das corridas do sistema antigo)
+DESCRICAO_FUNDIDO = "FUNDID"
+_CHAVE_NOTA_ENTRADA = (*_ORG, "AGN_TAB_IN_CODIGO", "AGN_PAD_IN_CODIGO", "AGN_IN_CODIGO", "AGN_TAU_ST_CODIGO",
+                       "RCB_ST_NOTA", "RCB_DT_DOCUMENTO")  # fmt: skip
+
+
+def consulta_entradas(desde: date) -> tuple[str, dict]:
+    """SELECT dos itens de nota de entrada de peças fundidas da filial. A chave da nota inclui o fornecedor: o mesmo
+    número de NF existe para fornecedores diferentes."""
+    e = _esquema()
+    sql = f"""
+SELECT r.RCB_ST_NOTA AS NF, r.RCB_DT_MOVIMENTO AS ENTRADA, r.RCB_DT_DOCUMENTO AS EMISSAO, r.AGN_IN_CODIGO AS FORNECEDOR_CODIGO,
+       a.AGN_ST_NOME AS FORNECEDOR, a.AGN_ST_FANTASIA AS FORNECEDOR_FANTASIA, i.RCI_IN_SEQUENCIA AS SEQ_ITEM,
+       i.PRO_IN_CODIGO AS PRODUTO, p.PRO_ST_DESCRICAO AS DESCRICAO, i.UNI_ST_UNIDADE AS UNIDADE, i.RCI_RE_QUANTIDADE AS QTDE
+  FROM {e}.EST_ITENSRECEB i
+  JOIN {e}.EST_RECEBIMENTO r ON {_igual('i', 'r', _CHAVE_NOTA_ENTRADA)}
+  JOIN {e}.EST_PRODUTOS p ON p.PRO_IN_CODIGO = i.PRO_IN_CODIGO
+  LEFT JOIN {e}.GLO_AGENTES a
+    ON a.AGN_TAB_IN_CODIGO = r.AGN_TAB_IN_CODIGO AND a.AGN_PAD_IN_CODIGO = r.AGN_PAD_IN_CODIGO AND a.AGN_IN_CODIGO = r.AGN_IN_CODIGO
+ WHERE r.FIL_IN_CODIGO = :filial
+   AND r.RCB_DT_MOVIMENTO >= :desde
+   AND UPPER(p.PRO_ST_DESCRICAO) LIKE :fundido
+   AND (UPPER(p.PRO_ST_DESCRICAO) LIKE :pin OR UPPER(p.PRO_ST_DESCRICAO) LIKE :box OR UPPER(p.PRO_ST_DESCRICAO) LIKE :ark)"""
+    parametros_sql = {"filial": int(config().mega_filial), "desde": datetime.combine(desde, datetime.min.time()),
+                      "fundido": f"%{DESCRICAO_FUNDIDO}%", "pin": "%PIN%", "box": "%BOX%", "ark": "%ARK%"}  # fmt: skip
+    return sql, parametros_sql
+
+
+def ler_entradas(desde: date) -> list[dict]:
+    pronto, motivo = situacao()
+    if not pronto:
+        raise MegaIndisponivel(motivo)
+    sql, parametros_sql = consulta_entradas(desde)
+    with conectar() as conexao, conexao.cursor() as cursor:
+        conexao.call_timeout = 60 * 1000  # ms: é uma consulta da tela
+        cursor.execute("SET TRANSACTION READ ONLY")
+        cursor.execute(sql, parametros_sql)
+        return _dicionarios(cursor)
+
+
+@dataclass
+class EntradaMega:
+    chave: str  # fornecedor | NF | emissão | item da nota
+    nf: str
+    entrada: date | None
+    emissao: date | None
+    fornecedor_codigo: str
+    fornecedor: str  # razão social no Mega
+    descricao: str
+    tipo: str | None
+    unidade: str
+    qtde: int | None
+
+
+def _data(valor) -> date | None:
+    return valor.date() if isinstance(valor, datetime) else valor
+
+
+def montar_entradas(linhas: list[dict]) -> list[EntradaMega]:
+    entradas: dict[str, EntradaMega] = {}
+    for linha in linhas:
+        emissao = _data(linha.get("EMISSAO"))
+        chave = "|".join((_texto(linha.get("FORNECEDOR_CODIGO")), _texto(linha.get("NF")),
+                          emissao.isoformat() if emissao else "", _texto(linha.get("SEQ_ITEM"))))  # fmt: skip
+        if chave in entradas:
+            continue
+        qtde = _numero(linha.get("QTDE"))
+        descricao = _texto(linha.get("DESCRICAO"))
+        entradas[chave] = EntradaMega(
+            chave=chave, nf=_texto(linha.get("NF"))[:40], entrada=_data(linha.get("ENTRADA")), emissao=emissao,
+            fornecedor_codigo=_texto(linha.get("FORNECEDOR_CODIGO")),
+            fornecedor=(_texto(linha.get("FORNECEDOR")) or _texto(linha.get("FORNECEDOR_FANTASIA")))[:160],
+            descricao=descricao, tipo=classificar(descricao), unidade=_texto(linha.get("UNIDADE")),
+            qtde=round(qtde) if qtde is not None else None,
+        )  # fmt: skip
+    return list(entradas.values())
+
+
+def _nf(numero: str | None) -> str:
+    return (numero or "").strip().lstrip("0")
+
+
+def entradas_para_tela(db: Session, entradas: list[EntradaMega]) -> list[dict]:
+    """Cada entrada com o que já foi lançado na tela Matéria-prima (mesma NF, data de recebimento e tipo), quanto
+    falta e o nome de fornecedor a sugerir: o que a Qualidade já usou para esse fornecedor do Mega, senão o código do
+    cadastro de fornecedores com a mesma razão social, senão a razão social do Mega."""
+    lancadas: dict[tuple, list[MateriaPrima]] = defaultdict(list)
+    for mp in db.scalars(select(MateriaPrima).where(MateriaPrima.cancelado_em.is_(None))):
+        lancadas[(_nf(mp.nf_entrada), mp.data_recebimento, mp.tipo_destino)].append(mp)
+    apelidos: dict[str, Counter] = defaultdict(Counter)
+    for e in entradas:
+        for mp in lancadas.get((_nf(e.nf), e.entrada, e.tipo), []):
+            if mp.fornecedor.strip():
+                apelidos[e.fornecedor_codigo][mp.fornecedor.strip()] += 1
+    cadastro = {" ".join(f.razao_social.upper().split()): f.codigo for f in db.scalars(select(FornecedorMP).where(FornecedorMP.ativo))}
+    saida = []
+    for e in sorted(entradas, key=lambda x: (x.entrada or date.min, x.nf), reverse=True):
+        mps = lancadas.get((_nf(e.nf), e.entrada, e.tipo), [])
+        lancado = sum(mp.qt_fund for mp in mps)
+        sugerido = (apelidos[e.fornecedor_codigo].most_common(1)[0][0] if apelidos.get(e.fornecedor_codigo)
+                    else cadastro.get(" ".join(e.fornecedor.upper().split()), e.fornecedor))  # fmt: skip
+        saida.append({
+            "chave": e.chave, "nf": e.nf, "entrada": e.entrada, "emissao": e.emissao, "fornecedor": e.fornecedor,
+            "fornecedor_sugerido": sugerido, "descricao": e.descricao, "tipo": e.tipo, "unidade": e.unidade,
+            "qtde": e.qtde, "lancado": lancado, "falta": max((e.qtde or 0) - lancado, 0),
+            "corridas": [{"id": mp.id, "corrida": mp.corrida} for mp in mps],
+        })  # fmt: skip
+    return saida
 
 
 # ---------------------------------------------------------------- linha de comando
