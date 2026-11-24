@@ -68,21 +68,39 @@ def _amostra(valor: str | None) -> float | str | None:
     return _num(s)
 
 
+def _texto_da_celula(palavras: list, retangulo) -> str:
+    """Palavras cujo CENTRO está dentro da célula, linha a linha.
+
+    O recorte `get_text(clip=...)` também pega caracteres que só encostam na borda: com fonte alta/larga
+    (ex.: DejaVu, a do servidor Linux) entravam pedaços da linha de cima ou de baixo no valor lido.
+    """
+    x0, y0, x1, y1 = retangulo
+    dentro = [p for p in palavras if x0 <= (p[0] + p[2]) / 2 <= x1 and y0 <= (p[1] + p[3]) / 2 <= y1]
+    dentro.sort(key=lambda p: (p[5], p[6], p[7]))  # bloco, linha e posição da palavra no PDF
+    linhas: list[list[str]] = []
+    chave_anterior = None
+    for p in dentro:
+        if (p[5], p[6]) != chave_anterior:
+            linhas.append([])
+            chave_anterior = (p[5], p[6])
+        linhas[-1].append(p[4])
+    return "\n".join(" ".join(linha) for linha in linhas)
+
+
 def _celulas(pagina, tabela, indice: int, extraida: list) -> list[str]:
     """Texto de cada célula da linha, relido pela posição; se não der, o que o extract() trouxe."""
     try:
         retangulos = tabela.rows[indice].cells
     except (IndexError, AttributeError):
         retangulos = []
+    try:
+        palavras = pagina.get_text("words")
+    except (ValueError, RuntimeError):
+        palavras = []
     saida = []
     for coluna, bruto in enumerate(extraida):
-        texto = ""
         retangulo = retangulos[coluna] if coluna < len(retangulos) else None
-        if retangulo:
-            try:
-                texto = pagina.get_text(clip=pymupdf.Rect(*retangulo)).strip()
-            except (ValueError, RuntimeError):
-                texto = ""
+        texto = _texto_da_celula(palavras, retangulo).strip() if retangulo else ""
         saida.append(texto or (bruto or "").strip())
     return saida
 

@@ -204,7 +204,8 @@ def test_pdf_da_of_e_documento_interno(cliente, admin, db):
     r = cliente.get(f"/api/faturamento/{of_id}/pdf")
     assert r.status_code == 200 and r.content.startswith(b"%PDF") and r.headers["content-type"] == "application/pdf"
     with pymupdf.open(stream=r.content, filetype="pdf") as documento:
-        texto = "\n".join(p.get_text() for p in documento)
+        # Espaços e quebras normalizados: no servidor (fonte DejaVu, mais larga) um título como "Qtd lote" quebra linha
+        texto = " ".join("\n".join(p.get_text() for p in documento).split())
     for esperado in ("ORDEM DE FATURAMENTO", f"OF-{ANO}-001", "CLIENTE PADRAO EXEMPLO", "26-4-900001 (72 Peças)",
                      "26-4-900002 (10 Peças)", "Qtd lote", "Qtd lib.", "Totais", "12,50 kg", "PO-1", "80001", "Qualidade",
                      "PCP / Expedição", "Faturamento"):  # fmt: skip
