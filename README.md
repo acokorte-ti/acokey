@@ -87,7 +87,7 @@ Para subir localmente, crie `backend\.env` (fica fora do Git) com:
 
 ```
 APP_ENV=dev
-DATABASE_URL=sqlite:///../dados_dev/acokeyq.db
+DATABASE_URL=sqlite:///../dados_dev/acokey.db
 ARQUIVOS_DIR=../dados_dev/arquivos
 ADMIN_SENHA_INICIAL=<uma senha com letras e números, 10+ caracteres>
 ```
@@ -118,58 +118,69 @@ caminho relativo.
 
 - **Senhas não são migradas.** Todos os usuários entram sem senha utilizável e com troca obrigatória; o
   administrador define uma provisória para cada um na tela Usuários.
-- **Ninguém vira administrador na carga.** O relatório avisa quem tinha o módulo Cadastros (no sistema antigo,
-  ele também cadastrava usuários) para você decidir.
+- **Só vira administrador quem for indicado com `--admin LOGIN`** (o login novo). O relatório avisa quem
+  tinha o módulo Cadastros no sistema antigo (lá ele também cadastrava usuários) e não foi indicado.
+- **`--renomear ANTIGO=NOVO`** troca o login de um usuário na carga (ex.: para o padrão `nome.sobrenome`).
+  A assinatura e o histórico da auditoria vão junto para o login novo. As duas opções podem se repetir.
+- Os logins de verdade são passados só na linha de comando, no servidor: **não os escreva neste repositório**.
 - **Especificação que não seja número bloqueia a carga** (nunca se inventa valor da especificação técnica).
 - O relatório lista arquivos referenciados que não existem no disco e arquivos da pasta de dados que o banco
   não referencia (por exemplo, os databooks gerados em `lotes/<id>/databook/`, que ficam só no sistema antigo
   até o módulo de databook ser feito).
 
 Simulação com os dados reais em 23/11/2026: 18 lotes, 97 registros, 90 anexos, 106 OPs, 7 usuários,
-111 arquivos (101,7 MB), nenhum arquivo faltando e nenhum bloqueio. Avisos: 4 OPs repetidas no
+111 arquivos (101,7 MB), nenhum arquivo faltando e nenhum bloqueio. Avisos: 4 OPs repetidas na
 planilha de OPs (fica a última linha, igual ao sistema antigo) e 2 usuários com o módulo Cadastros.
 
-No servidor, com a pasta do sistema antigo copiada para `~/acokeyq-carga/`. A carga roda com o usuário da
+No servidor, com a pasta do sistema antigo copiada para `~/acokey-carga/`. A carga roda com o usuário da
 imagem (`app`, uid 10001), que é o dono do volume de arquivos; por isso a pasta passa a ser dele, sem acesso
 para mais ninguém:
 
 ```bash
-sudo chown -R 10001:10001 ~/acokeyq-carga && sudo chmod -R u+rX,go-rwx ~/acokeyq-carga
-RODAR='docker compose run --rm --no-deps -v /home/ubuntu/acokeyq-carga:/carga:ro api'
-$RODAR python -m app.carga /carga              # só confere e mostra o relatório
-$RODAR python -m app.carga /carga --aplicar    # grava
+sudo chown -R 10001:10001 ~/acokey-carga && sudo chmod -R u+rX,go-rwx ~/acokey-carga
+RODAR='docker compose run --rm --no-deps -v /home/ubuntu/acokey-carga:/carga:ro api'
+CARGA='python -m app.carga /carga --renomear <antigo>=<novo> --admin <novo>'
+$RODAR $CARGA              # só confere e mostra o relatório
+$RODAR $CARGA --aplicar    # grava
 ```
 
-Depois da carga, apague a cópia (`sudo rm -rf ~/acokeyq-carga`): ela tem os dados reais e as planilhas.
+Rode a carga depois da primeira subida da API: o administrador do `.env` (`ADMIN_LOGIN`) já existe e não é
+tocado pela carga.
+
+Depois da carga, apague a cópia (`sudo rm -rf ~/acokey-carga`): ela tem os dados reais e as planilhas.
 
 ## Publicação (system-lab)
 
-Pasta `~/apps/acokeyq`, no mesmo padrão dos outros sistemas do servidor. **A confirmar:** o nome do site
-(`acokeyq.acokorte.com.br` nos arquivos) e a porta local (8093).
+Pasta `~/apps/acokey`, no mesmo padrão dos outros sistemas do servidor. Site: `acokey.acokorte.com.br`.
+**A confirmar:** a porta local (8093), que precisa estar livre no servidor.
 
 ```bash
-cp .env.example .env && chmod 600 .env     # trocar POSTGRES_PASSWORD, DATABASE_URL e ADMIN_SENHA_INICIAL
+cp .env.example .env && chmod 600 .env     # trocar POSTGRES_PASSWORD, DATABASE_URL, ADMIN_LOGIN e ADMIN_SENHA_INICIAL
 docker compose up -d --build               # site em 127.0.0.1:8093
 ```
+
+Administradores: o da TI entra pelo `.env` (`ADMIN_LOGIN`, `ADMIN_NOME`, `ADMIN_SENHA_INICIAL`, criado na
+primeira subida); o da Qualidade entra pela carga, com `--admin` (seção "Carga do sistema antigo"). Os dois
+trocam a senha no primeiro acesso.
 
 HTTPS (uma vez, com sudo; o DNS já precisa apontar para o servidor):
 
 ```bash
-sudo certbot certonly --webroot -w /var/www/certbot -d acokeyq.acokorte.com.br
-sudo cp deploy/nginx-host/acokeyq.acokorte.com.br.conf /etc/nginx/sites-available/acokeyq
-sudo ln -s /etc/nginx/sites-available/acokeyq /etc/nginx/sites-enabled/acokeyq
+sudo certbot certonly --webroot -w /var/www/certbot -d acokey.acokorte.com.br
+sudo cp deploy/nginx-host/acokey.acokorte.com.br.conf /etc/nginx/sites-available/acokey
+sudo ln -s /etc/nginx/sites-available/acokey /etc/nginx/sites-enabled/acokey
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
 Backup (crontab do usuário `ubuntu`):
 
 ```
-50 2 * * *  $HOME/apps/acokeyq/deploy/backup/backup.sh >> $HOME/.local/state/acokeyq-backup.log 2>&1
+50 2 * * *  $HOME/apps/acokey/deploy/backup/backup.sh >> $HOME/.local/state/acokey-backup.log 2>&1
 ```
 
 `deploy/backup/backup.sh` gera, por dia, um dump do banco e um pacote dos arquivos, ambos cifrados com
 GPG/AES256 (banco guardado 30 dias, arquivos 7 dias, uma cópia mensal de cada por 12 meses). A senha fica em
-`~/.config/acokeyq/backup.env` (`BACKUP_GPG_SENHA=...`, permissão 600) — **guarde uma cópia no cofre de
+`~/.config/acokey/backup.env` (`BACKUP_GPG_SENHA=...`, permissão 600) — **guarde uma cópia no cofre de
 senhas; sem ela o backup não abre**. `deploy/backup/restaurar.sh <arquivo>` restaura o banco em um banco de
 conferência e mostra as contagens.
 

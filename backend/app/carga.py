@@ -5,10 +5,11 @@ Uso, na pasta backend (o .env aponta para o banco NOVO):
     python -m app.carga ../legado                       # só confere e mostra o relatório
     python -m app.carga ../legado --aplicar             # grava
     python -m app.carga ../legado --dados data_teste    # usa a base de TESTES do sistema antigo
+    python -m app.carga ../legado --renomear fulano=fulano.tal --admin fulano.tal   # troca um login e o torna administrador
 
-No servidor, com a pasta do sistema antigo copiada para ~/acokeyq-carga/ (permissão 700):
+No servidor, com a pasta do sistema antigo copiada para ~/acokey-carga/ (permissão 700):
 
-    docker compose run --rm --no-deps -v ~/acokeyq-carga:/carga:ro api python -m app.carga /carga --aplicar
+    docker compose run --rm --no-deps -v ~/acokey-carga:/carga:ro api python -m app.carga /carga --aplicar
 
 Regras:
 - Só roda com o banco sem lotes, sem matéria-prima e sem OPs (o administrador inicial pode existir).
@@ -272,7 +273,15 @@ class Plano:
     copias: list[tuple[Path, str]] = field(default_factory=list)  # (origem, destino relativo)
 
 
-def montar(db: Session, raiz: Path, pasta_dados: str, rel: Relatorio) -> Plano:
+def montar(
+    db: Session,
+    raiz: Path,
+    pasta_dados: str,
+    rel: Relatorio,
+    renomear: dict[str, str] | None = None,
+    admins: set[str] | None = None,
+) -> Plano:
+    """renomear: {login antigo: login novo}. admins: logins (já os novos) que entram como administrador."""
     banco = raiz / pasta_dados / "sistema.db"
     if not banco.is_file():
         raise ErroCarga(f"Banco do sistema antigo não encontrado: {banco}")
@@ -600,17 +609,31 @@ def montar(db: Session, raiz: Path, pasta_dados: str, rel: Relatorio) -> Plano:
         rel.contar(nome, len(lista))
 
     # --- usuários (sem senha) e auditoria
+    renomear = {k.strip().lower(): v.strip().lower() for k, v in (renomear or {}).items()}
+    admins = {a.strip().lower() for a in (admins or set())}
     existentes = {u.lower() for u in db.scalars(select(Usuario.login))}
     vistos_tutorial = {_texto(r.get("usuario")).lower(): r.get("visto_em") for r in t.get("tutorial_visto", [])}
     pasta_assinaturas = _achar(raiz, "assinaturas")
-    for linha in _planilha(raiz, "Usuarios.xlsx"):
-        login = _texto(_col(linha, 0)).lower()
-        if not login:
+    linhas_usuarios = _planilha(raiz, "Usuarios.xlsx")
+    logins_antigos = {_texto(_col(linha, 0)).lower() for linha in linhas_usuarios} - {""}
+    for antigo, novo in renomear.items():
+        if antigo not in logins_antigos:
+            rel.bloqueios.append(f"--renomear {antigo}={novo}: não há usuário {antigo!r} no sistema antigo")
+        if not _LOGIN_VALIDO.match(novo):
+            rel.bloqueios.append(f"--renomear {antigo}={novo}: use só letras minúsculas, números, ponto, hífen e sublinhado")
+        if novo in existentes or (novo in logins_antigos and novo not in renomear):
+            rel.bloqueios.append(f"--renomear {antigo}={novo}: já existe um usuário {novo!r}")
+    for linha in linhas_usuarios:
+        antigo = _texto(_col(linha, 0)).lower()
+        if not antigo:
             continue
+        login = renomear.get(antigo, antigo)
         if login in existentes:
             rel.avisos.append(f"usuário {login!r} já existe no sistema novo: mantido como está (não migrado)")
             continue
         existentes.add(login)
+        if login != antigo:
+            rel.avisos.append(f"usuário {antigo!r} entra com o login {login!r}")
         if not _LOGIN_VALIDO.match(login):
             rel.pendencias.append(f"usuário {login!r}: login com caracteres que o sistema novo não aceita na tela")
         cargo = _texto(_col(linha, 2))
@@ -623,9 +646,9 @@ def montar(db: Session, raiz: Path, pasta_dados: str, rel: Relatorio) -> Plano:
         usuario = Usuario(
             login=login, nome=_texto(_col(linha, 3)) or login, cargo=cargo,
             senha_hash=hash_senha(secrets.token_urlsafe(32)),  # ninguém conhece: o administrador define a provisória
-            trocar_senha=True, ativo=True, admin=False,
+            trocar_senha=True, ativo=True, admin=login in admins,
             pode_aprovar=("gerente" in cargo.lower()) if sem_perfis else _texto(_col(linha, 10)).upper() == "SIM",
-            tutorial_visto_em=local_para_utc(data_hora(vistos_tutorial.get(login), f"tutorial de {login}", rel)),
+            tutorial_visto_em=local_para_utc(data_hora(vistos_tutorial.get(antigo), f"tutorial de {login}", rel)),
             **{f"mod_{m}": marcado(5 + i) for i, m in enumerate(MODULOS)},
         )  # fmt: skip
         nome_assinatura = Path(_texto(_col(linha, 4))).name
@@ -637,11 +660,19 @@ def montar(db: Session, raiz: Path, pasta_dados: str, rel: Relatorio) -> Plano:
                 rel.bytes_copiados += origem.stat().st_size
             else:
                 rel.arquivos_faltando.append(f"assinatura de {login}: {nome_assinatura}")
-        if usuario.mod_cadastros:
+        if usuario.admin:
+            rel.avisos.append(f"usuário {login!r} entra como administrador")
+        elif usuario.mod_cadastros:
             rel.avisos.append(f"usuário {login!r} tinha o módulo Cadastros no sistema antigo (lá ele também cadastrava "
-                              "usuários). No novo, só administrador cadastra usuários: decida se ele deve ser administrador")  # fmt: skip
+                              "usuários). No novo, só administrador cadastra usuários: use --admin se ele deve ser")  # fmt: skip
         plano.usuarios.append(usuario)
     rel.contar("usuarios", len(plano.usuarios))
+    migrados = {u.login for u in plano.usuarios}
+    for a in sorted(admins - migrados):
+        if a in existentes:
+            rel.avisos.append(f"--admin {a}: o usuário já existia no sistema novo e não foi alterado pela carga")
+        else:
+            rel.bloqueios.append(f"--admin {a}: não há esse usuário no sistema antigo (confira o login, ou o --renomear)")
     if plano.usuarios and not any(u.pode_aprovar for u in plano.usuarios):
         rel.avisos.append("nenhum usuário migrado pode aprovar: os relatórios ficarão sem 'Aprovado por'")
 
@@ -662,7 +693,8 @@ def montar(db: Session, raiz: Path, pasta_dados: str, rel: Relatorio) -> Plano:
                 entidade_id=_texto(r.get("entidade_id"))[:80] or None, lote_id=lote_id if lote_id in ids_lote else None,
                 detalhes=detalhes, ip=_texto(r.get("ip"))[:45] or None,
             ),
-            _texto(r.get("usuario")).lower(),
+            # O texto do login fica como foi gravado; o vínculo vai para o usuário novo (já renomeado)
+            renomear.get(_texto(r.get("usuario")).lower(), _texto(r.get("usuario")).lower()),
         ))  # fmt: skip
     rel.contar("auditoria", len(plano.auditoria))
 
@@ -693,11 +725,19 @@ def _acertar_sequencias(db: Session) -> None:
         db.execute(text(f"SELECT setval(pg_get_serial_sequence('{tabela}', 'id'), COALESCE((SELECT MAX(id) FROM {tabela}), 1))"))
 
 
-def executar(db: Session, raiz: Path, pasta_dados: str = "data", aplicar: bool = False, copiar_arquivos: bool = True) -> Relatorio:
+def executar(
+    db: Session,
+    raiz: Path,
+    pasta_dados: str = "data",
+    aplicar: bool = False,
+    copiar_arquivos: bool = True,
+    renomear: dict[str, str] | None = None,
+    admins: set[str] | None = None,
+) -> Relatorio:
     rel = Relatorio()
     if not _banco_vazio(db):
         raise ErroCarga("O banco novo já tem lotes, matéria-prima ou OPs: a carga inicial só roda com ele vazio.")
-    plano = montar(db, raiz, pasta_dados, rel)
+    plano = montar(db, raiz, pasta_dados, rel, renomear, admins)
     if not aplicar:
         return rel
     if rel.bloqueios:
@@ -734,13 +774,23 @@ def main() -> None:
     argumentos.add_argument("--dados", default="data", help="pasta de dados dentro dela: data (produção) ou data_teste")
     argumentos.add_argument("--aplicar", action="store_true", help="grava (sem isto, só confere e mostra o relatório)")
     argumentos.add_argument("--sem-arquivos", action="store_true", help="não copia os arquivos (só para conferência)")
+    argumentos.add_argument("--renomear", action="append", default=[], metavar="ANTIGO=NOVO",
+                            help="troca o login de um usuário na carga (pode repetir)")  # fmt: skip
+    argumentos.add_argument("--admin", action="append", default=[], metavar="LOGIN",
+                            help="usuário que entra como administrador; use o login NOVO (pode repetir)")  # fmt: skip
     opcoes = argumentos.parse_args()
+    renomear = {}
+    for par in opcoes.renomear:
+        antigo, igual, novo = par.partition("=")
+        if not igual or not antigo.strip() or not novo.strip():
+            sys.exit(f"--renomear {par!r}: use o formato ANTIGO=NOVO")
+        renomear[antigo] = novo
 
     from app.db import SessionLocal
 
     with SessionLocal() as db:
         try:
-            rel = executar(db, opcoes.raiz, opcoes.dados, opcoes.aplicar, not opcoes.sem_arquivos)
+            rel = executar(db, opcoes.raiz, opcoes.dados, opcoes.aplicar, not opcoes.sem_arquivos, renomear, set(opcoes.admin))
         except ErroCarga as erro:
             sys.exit(str(erro))
     print(rel.texto(aplicado=opcoes.aplicar))

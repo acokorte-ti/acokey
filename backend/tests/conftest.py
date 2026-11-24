@@ -7,7 +7,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-_TMP = Path(tempfile.mkdtemp(prefix="acokeyq_testes_"))
+_TMP = Path(tempfile.mkdtemp(prefix="acokey_testes_"))
 os.environ.update(
     APP_ENV="teste",
     DATABASE_URL=os.environ.get("TESTE_DATABASE_URL") or f"sqlite:///{(_TMP / 'teste.db').as_posix()}",

@@ -1,6 +1,6 @@
 # AçoKey Q — produção no system-lab (Ubuntu ARM64), atrás do nginx do servidor.
 # Uso: docker compose up -d --build   (o site fica em 127.0.0.1:${WEB_PORTA:-8093}; o nginx do host faz o HTTPS)
-name: acokeyq
+name: acokey
 
 services:
   db:

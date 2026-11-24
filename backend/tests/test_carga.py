@@ -161,6 +161,34 @@ def test_planilha_de_ops_ignora_copia_de_seguranca_e_bloqueia_se_houver_duas(db,
     assert any("mais de uma planilha de OPs" in b for b in rel.bloqueios)
 
 
+def test_renomear_login_e_definir_administrador(db, legado, pasta_arquivos):
+    rel = carga.executar(db, legado, aplicar=True, renomear={"Fulano": "fulano.tal"}, admins={"fulano.tal"})
+    assert not rel.bloqueios
+    assert db.scalar(select(Usuario).where(Usuario.login == "fulano")) is None
+    novo = db.scalar(select(Usuario).where(Usuario.login == "fulano.tal"))
+    assert novo.admin and novo.pode_aprovar and novo.trocar_senha
+    assert novo.tutorial_visto_em is not None  # o tutorial era do login antigo
+    assert novo.assinatura_arquivo == "assinaturas/fulano.tal.png" and (pasta_arquivos / novo.assinatura_arquivo).exists()
+    assert not db.scalar(select(Usuario).where(Usuario.login == "joao")).admin
+    antiga = db.scalar(select(Auditoria).where(Auditoria.acao == "CRIAR"))
+    assert antiga.usuario_id == novo.id and antiga.login == "fulano"  # o texto da auditoria antiga fica como foi gravado
+
+
+@pytest.mark.parametrize(
+    ("renomear", "admins", "esperado"),
+    [
+        ({"beltrano": "beltrano.x"}, set(), "não há usuário 'beltrano'"),
+        ({"fulano": "Fulano Tal"}, set(), "use só letras minúsculas"),
+        ({"fulano": "joao"}, set(), "já existe um usuário 'joao'"),
+        ({}, {"ninguem"}, "--admin ninguem"),
+        ({"fulano": "fulano.tal"}, {"fulano"}, "--admin fulano"),  # o --admin usa o login NOVO
+    ],
+)
+def test_renomear_e_admin_errados_bloqueiam(db, legado, renomear, admins, esperado):
+    rel = carga.executar(db, legado, aplicar=False, renomear=renomear, admins=admins)
+    assert any(esperado in b for b in rel.bloqueios), rel.bloqueios
+
+
 def test_carga_so_roda_com_banco_vazio(db, legado):
     carga.executar(db, legado, aplicar=True, copiar_arquivos=False)
     with pytest.raises(carga.ErroCarga, match="vazio"):

@@ -13,7 +13,7 @@ class Config(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_env: str = "producao"  # producao | dev | teste
-    database_url: str = "postgresql+psycopg://acokeyq:acokeyq@db:5432/acokeyq"
+    database_url: str = "postgresql+psycopg://acokey:acokey@db:5432/acokey"
     # Pasta dos arquivos enviados (anexos dos lotes, certificados, fotos, assinaturas). No servidor é um volume.
     arquivos_dir: str = "/dados/arquivos"
 
