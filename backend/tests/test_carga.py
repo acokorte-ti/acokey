@@ -95,6 +95,7 @@ def legado(tmp_path: Path) -> Path:
     _planilha(raiz / "Cadastro_Lote_Cliente.xlsx",
               [["CLIENTE EXEMPLO", 900001, "4330-01", "INSTR. CONTROLE TRAVAMENTO PIN", "pin", None, "", "PIV-9", 72, None, "P1", "PO-1"]],
               aba="Dados")  # fmt: skip
+    (raiz / "parametros_acokey.json").write_text('{"cliente_nome": "CLIENTE EXEMPLO"}', encoding="utf-8")
     # Cópia de segurança que o sistema antigo deixava ao lado: não pode ser lida no lugar da atual
     _planilha(raiz / "Cadastro_Lote_Cliente_antes_20261119.xlsx", [["X", 1, "", "", "BOX"]], aba="Dados")
     return raiz
@@ -127,6 +128,14 @@ def test_carga_grava_mantendo_ids_e_arquivos(db, legado, pasta_arquivos):
     assert any("sumiu.pdf" in f for f in rel.arquivos_faltando)
     assert db.get(Anexo, 2) is not None  # o registro fica, para alguém reanexar
     assert rel.nao_referenciados == {"lotes/<id>/databook": 1}  # seguranca.cfg nem entra na conta
+    assert (pasta_arquivos / "lotes/1/databook/saida/Databook_x.pdf").exists()  # copiado no mesmo caminho
+    assert not (pasta_arquivos / "seguranca.cfg").exists()
+    assert rel.contagens["recursos: databooks"] == 0  # o enviado já foi copiado pelo registro de envio
+    assert (pasta_arquivos / "databooks/Enviados/Databook_DB-1.pdf").exists()
+    assert rel.contagens["recursos: imagens"] == 0 and rel.contagens["parametros"] == 1
+    from app import parametros
+
+    assert parametros.ler(db, "cliente_nome") == "CLIENTE EXEMPLO"
 
     databook = db.get(DatabookEnviado, 1)
     assert databook.caminho == "databooks/Enviados/Databook_DB-1.pdf" and databook.data_envio.isoformat() == "2026-11-19"

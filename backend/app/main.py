@@ -5,7 +5,23 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app import api_auth, api_lotes
+from app import (
+    api_auth,
+    api_cadastros,
+    api_cargas_tt,
+    api_databooks,
+    api_dimensional,
+    api_envios,
+    api_especificacoes,
+    api_etapas,
+    api_faturamento,
+    api_lotes,
+    api_materia_prima,
+    api_nc,
+    api_paineis,
+    api_recursos,
+    api_relatorios,
+)
 from app.config import config
 from app.db import SessionLocal
 from app.sementes import semear
@@ -28,7 +44,11 @@ app = FastAPI(
     openapi_url="/api/openapi.json" if _dev else None,
 )
 
-for modulo in (api_auth, api_lotes):
+MODULOS = (
+    api_auth, api_lotes, api_etapas, api_nc, api_especificacoes, api_dimensional, api_materia_prima, api_cadastros,
+    api_cargas_tt, api_relatorios, api_envios, api_faturamento, api_databooks, api_paineis, api_recursos,
+)  # fmt: skip
+for modulo in MODULOS:
     app.include_router(modulo.rota, prefix="/api")
 
 
@@ -56,6 +76,16 @@ ROTULOS = {
     "nome": "Nome", "cargo": "Cargo", "modulos": "Módulos", "admin": "Administrador",
     "pode_aprovar": "Pode aprovar", "ativo": "Ativo", "de": "Data inicial", "ate": "Data final",
     "lote_id": "Lote", "pagina": "Página", "tamanho": "Tamanho da página",
+    "corrida": "Corrida", "nf_entrada": "NF de entrada", "tipo_destino": "Tipo de destino",
+    "data_recebimento": "Data de recebimento", "qt_fund": "Quantidade fundida", "qt_real": "Quantidade real",
+    "qt_ok": "Quantidade aprovada", "qt_rej": "Quantidade rejeitada", "qt_retrab": "Quantidade em retrabalho",
+    "qt_cp_tt": "Corpos de prova para TT", "motivo": "Motivo", "decisao": "Decisão", "observacao": "Observação",
+    "observacoes": "Observações", "op": "OP", "numero": "Número", "qtd": "Quantidade", "codigo": "Código",
+    "descricao": "Descrição", "razao_social": "Razão social", "tipo_servico": "Tipo de serviço",
+    "data_calibracao": "Data da calibração", "validade_calibracao": "Validade da calibração", "valor": "Valor",
+    "arquivo": "Arquivo", "arquivos": "Arquivos", "ops": "OPs", "qt_lote": "Quantidade do lote",
+    "qt_faturada": "Quantidade faturada", "data_faturamento": "Data de faturamento", "tipo": "Tipo",
+    "coditem": "Item (CODITEM)", "justificativa": "Justificativa", "qtd_afetada": "Quantidade afetada",
 }  # fmt: skip
 
 

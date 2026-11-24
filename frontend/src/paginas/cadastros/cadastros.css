@@ -1,0 +1,191 @@
+/* Cadastros: equipamentos, prestadores, fornecedores, ordens de produção, parâmetros e assinatura. */
+
+.cad-filtro-largo {
+  width: 220px !important;
+}
+
+.cad-maiusculas {
+  text-transform: uppercase;
+}
+
+/* Calibração vencida: a linha inteira em vermelho claro, como no sistema antigo */
+.cad-linha-vencida > td {
+  background: var(--erro-fundo);
+}
+
+.cad-linha-vencida > td:first-child {
+  box-shadow: inset 3px 0 0 var(--erro);
+}
+
+.cad-validade {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.cad-descricao {
+  display: inline-block;
+  max-width: 340px;
+  overflow-wrap: anywhere;
+}
+
+/* ---- importação da planilha de OPs */
+
+.cad-importacao {
+  border-left: 4px solid var(--info);
+}
+
+.cad-resultado > * + * {
+  margin-top: 16px;
+}
+
+.cad-resultado h3 {
+  margin-bottom: 8px;
+  font-size: 15px;
+}
+
+.cad-contagens {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.cad-contagem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid var(--borda);
+  border-left: 4px solid var(--borda-forte);
+  border-radius: var(--raio);
+  background: var(--superficie);
+}
+
+.cad-contagem strong {
+  font-family: var(--fonte-mono);
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.cad-contagem span {
+  font-size: 13px;
+  color: var(--tinta-3);
+}
+
+.cad-contagem-ok {
+  border-left-color: var(--ok);
+}
+
+.cad-contagem-ok strong {
+  color: var(--ok);
+}
+
+.cad-contagem-alerta {
+  border-left-color: var(--alerta-borda);
+}
+
+.cad-contagem-alerta strong {
+  color: var(--alerta);
+}
+
+.cad-contagem-erro {
+  border-left-color: var(--erro);
+}
+
+.cad-contagem-erro strong {
+  color: var(--erro);
+}
+
+.cad-lista {
+  margin: 4px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+}
+
+.cad-alteradas li + li {
+  margin-top: 4px;
+}
+
+/* ---- parâmetros */
+
+.cad-param-descricao {
+  display: block;
+  max-width: 460px;
+  margin-top: 2px;
+  white-space: normal;
+}
+
+.cad-param-valor {
+  max-width: 420px;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+/* ---- assinatura digital */
+
+.cad-assinatura-mini {
+  display: block;
+  max-width: 140px;
+  max-height: 34px;
+  padding: 2px;
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+  background: #fff;
+}
+
+.cad-assinatura-atual {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.cad-assinatura-atual .cad-assinatura-mini {
+  max-width: 220px;
+  max-height: 60px;
+  padding: 4px;
+}
+
+.cad-assinatura-caixa {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 420px;
+  min-height: 110px;
+  padding: 8px;
+  overflow: hidden;
+  border: 2px dashed var(--borda-forte);
+  border-radius: var(--raio-painel);
+  background: var(--superficie-2);
+  text-align: center;
+  cursor: pointer;
+}
+
+.cad-assinatura-caixa:focus-visible,
+.cad-assinatura-ativa {
+  border-style: solid;
+  border-color: var(--foco);
+  background: #eaf3ff;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(31, 111, 209, 0.25);
+}
+
+.cad-assinatura-com-imagem {
+  padding: 0;
+  border-style: solid;
+  background: #fff;
+}
+
+.cad-assinatura-caixa img {
+  display: block;
+  max-width: 100%;
+  max-height: 110px;
+  margin: 0 auto;
+}
+
+.cad-assinatura-convite {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--tinta-3);
+}

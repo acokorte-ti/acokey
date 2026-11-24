@@ -1,0 +1,221 @@
+/*
+ * Databooks: controle de envio ao cliente (Enviado-DB), conferência do PDF e o bloco da página do lote.
+ * Prefixo: db-. Roxo do "Enviado-DB" é o mesmo do sistema antigo (e dos painéis).
+ */
+
+.db-contagem {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--neutro-fundo);
+  color: var(--tinta-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.aba-atual .db-contagem {
+  background: var(--destaque);
+  color: #ffffff;
+}
+
+.db-topo-lista {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.db-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.db-arquivo {
+  display: block;
+  color: var(--tinta-3);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.db-rev {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--info-fundo);
+  color: var(--info);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.db-velho {
+  color: var(--alerta);
+  font-weight: 600;
+}
+
+.db-enviado {
+  color: #5d3a9c;
+  font-weight: 600;
+}
+
+.db-linha-desfeita td {
+  color: var(--tinta-3);
+  background: var(--superficie-2);
+}
+
+/* ---------------------------------------------------------------- bloco da página do lote */
+
+.db-pronto {
+  padding: 14px 16px;
+  border: 2px solid var(--ok);
+  border-radius: var(--raio-painel);
+  background: var(--ok-fundo);
+}
+
+.db-pronto > * + * {
+  margin-top: 10px;
+}
+
+.db-pronto-titulo {
+  display: block;
+  color: var(--ok);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.db-alertas {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--raio);
+  background: var(--superficie);
+  font-family: var(--fonte-mono);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.db-data-aprovacao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  padding: 14px 16px;
+  border: 2px solid var(--alerta-borda);
+  border-radius: var(--raio-painel);
+  background: var(--alerta-fundo);
+}
+
+.db-data-aprovacao-texto {
+  flex: 1 1 260px;
+}
+
+.db-data-aprovacao-texto strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--alerta);
+  font-size: 15px;
+}
+
+.db-data-aprovacao input[type='date'] {
+  width: 220px;
+  border: 2px solid var(--alerta-borda);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.db-capa {
+  padding: 12px 14px;
+  border: 1px dashed var(--borda-forte);
+  border-radius: var(--raio);
+  background: var(--superficie-2);
+}
+
+.db-revisoes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.db-revisoes li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+/* ---------------------------------------------------------------- conferência */
+
+.db-numeros {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.db-numero-erro {
+  border-left: 4px solid var(--erro);
+}
+
+.db-numero-erro .cartao-valor {
+  color: var(--erro);
+}
+
+.db-numero-ok {
+  border-left: 4px solid var(--ok);
+}
+
+.db-pagina {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 18px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.db-marcas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.db-marca {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.db-marca-ok {
+  background: var(--ok-fundo);
+  color: var(--ok);
+}
+
+.db-marca-erro {
+  background: var(--erro-fundo);
+  color: var(--erro);
+}
+
+.db-trecho {
+  color: var(--tinta-3);
+  font-size: 12px;
+}
+
+.db-linha-erro td {
+  background: #fff7f6;
+}

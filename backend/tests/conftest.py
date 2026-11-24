@@ -72,3 +72,56 @@ def admin_pronto(cliente: TestClient) -> str:
     )
     assert r.status_code == 200, r.text
     return csrf
+
+
+# ---------------------------------------------------------------- atalhos para os testes de cada módulo
+
+SENHA_TESTE = "Chave-Forno-2026x"
+
+
+@pytest.fixture
+def admin(cliente) -> str:
+    """O cliente principal já entra como administrador (senha trocada). Devolve o CSRF dele."""
+    return admin_pronto(cliente)
+
+
+@pytest.fixture
+def como(cliente, admin):
+    """Fábrica de usuários logados: `outro, csrf = como(modulos=["qualidade"], pode_aprovar=True)`.
+
+    Cria o usuário pelo administrador, entra com ele num cliente separado e troca a senha provisória.
+    """
+    from app.main import app
+
+    abertos: list[TestClient] = []
+
+    def fabrica(*, modulos=(), pode_aprovar=False, eh_admin=False, login=None, nome="Fulano de Tal"):
+        login = login or f"usuario{len(abertos) + 1}"
+        corpo = {"login": login, "nome": nome, "cargo": "Teste", "senha": "Provisoria-2026",
+                 "modulos": list(modulos), "pode_aprovar": pode_aprovar, "admin": eh_admin}  # fmt: skip
+        r = cliente.post("/api/usuarios", json=corpo, headers={"X-CSRF-Token": admin})
+        assert r.status_code == 201, r.text
+        outro = TestClient(app)
+        abertos.append(outro)
+        csrf = entrar(outro, login, "Provisoria-2026")
+        r = outro.post("/api/auth/trocar-senha", json={"senha_atual": "Provisoria-2026", "senha_nova": SENHA_TESTE},
+                       headers={"X-CSRF-Token": csrf})  # fmt: skip
+        assert r.status_code == 200, r.text
+        return outro, csrf
+
+    yield fabrica
+    for outro in abertos:
+        outro.close()
+
+
+def lote_exemplo(db, numero="26-4-900001", tipo="PIN", op="900001", qtd=72, **extra):
+    """Lote fictício gravado direto no banco (com commit)."""
+    from datetime import datetime
+
+    from app.models import Lote
+
+    lote = Lote(numero=numero, op=op, tipo=tipo, qtd=qtd, etapa_desde=datetime(2026, 11, 20, 8, 0),
+                criado_em=datetime(2026, 11, 20, 8, 0), **extra)  # fmt: skip
+    db.add(lote)
+    db.commit()
+    return lote

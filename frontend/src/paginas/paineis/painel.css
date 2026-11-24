@@ -1,0 +1,150 @@
+/* Painel de lotes (paginas/Painel.tsx): ações pendentes, resumo e a coluna Enviado-DB. Prefixo painel-. */
+
+.painel-alertas {
+  border-left: 4px solid var(--alerta-borda);
+}
+
+.painel-alertas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.painel-alerta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--painel-cor, var(--alerta));
+  border-radius: var(--raio);
+  background: var(--superficie);
+  color: var(--tinta-2);
+  text-decoration: none;
+}
+
+.painel-alerta:hover {
+  border-color: var(--tinta);
+  border-left-color: var(--painel-cor, var(--alerta));
+  color: var(--tinta-2);
+}
+
+.painel-alerta-icone {
+  width: 20px;
+  height: 20px;
+  color: var(--painel-cor, var(--alerta));
+}
+
+.painel-alerta-texto {
+  flex: 1;
+  min-width: 0;
+}
+
+.painel-alerta-acao {
+  flex: none;
+  padding: 2px 10px;
+  border: 1px solid var(--borda-clara);
+  border-radius: var(--raio);
+  color: var(--tinta);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.painel-alerta-erro {
+  --painel-cor: var(--erro);
+}
+
+.painel-alerta-alerta {
+  --painel-cor: var(--alerta);
+}
+
+.painel-alerta-info {
+  --painel-cor: var(--info);
+}
+
+.painel-alerta-ok {
+  --painel-cor: var(--ok);
+}
+
+.painel-resumo {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.painel-resumo .cartao-numero {
+  border-left-width: 4px;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.cartao-numero:hover {
+  border-color: var(--tinta);
+}
+
+.painel-numero-erro {
+  border-left-color: var(--erro);
+}
+
+.painel-numero-ok {
+  border-left-color: var(--ok);
+}
+
+.painel-numero-enviado,
+a.painel-numero-enviado:hover {
+  border-left-color: #7e57c2;
+}
+
+.painel-cartao-pronto {
+  box-shadow: inset 3px 0 0 var(--ok);
+}
+
+.painel-selo-pronto {
+  min-height: 20px;
+  font-size: 11.5px;
+}
+
+.painel-selo-enviado {
+  background: #f1ebfb;
+  color: #4a2e82;
+}
+
+.painel-selo-enviado::before {
+  -webkit-mask-image: var(--ic-ok);
+  mask-image: var(--ic-ok);
+}
+
+.painel-coluna-enviados .quadro-topo {
+  box-shadow: inset 0 3px 0 #7e57c2;
+}
+
+.painel-chip-enviado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--borda-clara);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  color: var(--tinta-2);
+  text-decoration: none;
+}
+
+.painel-chip-enviado:hover {
+  border-color: var(--tinta);
+  color: var(--tinta-2);
+}
+
+.painel-chip-contagem {
+  min-width: 28px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: #f1ebfb;
+  color: #4a2e82;
+  font-family: var(--fonte-mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: center;
+}

@@ -15,6 +15,8 @@ carga/
 *.gpg
 *.log
 *.cfg
+# ...menos os scripts SQL do próprio projeto (sem dados e sem senha)
+!scripts/mega/*.sql
 
 # Sistema antigo (Flask) inteiro: fica só na máquina local, FORA do repositório (que é público).
 # Tem dados reais da fábrica (banco, anexos, databooks, planilhas, assinaturas) e, no código e na

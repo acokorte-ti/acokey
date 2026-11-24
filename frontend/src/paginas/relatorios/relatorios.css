@@ -1,0 +1,287 @@
+/* Relatórios gerados pelo sistema (Dureza RIP-35, Tratamento Térmico, Visual). Classes com o prefixo rel-. */
+
+.rel-pagina {
+  max-width: 1180px;
+}
+
+/* ---- dados puxados do sistema ---- */
+.rel-resumo {
+  position: relative;
+  border-style: dashed;
+  background: var(--superficie-2);
+}
+
+.rel-origem {
+  position: absolute;
+  top: -10px;
+  left: 14px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--info-fundo);
+  color: var(--info);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.rel-resumo-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 24px;
+  margin: 0;
+}
+
+.rel-resumo-grade dt {
+  color: var(--tinta-3);
+  font-size: 12px;
+}
+
+.rel-resumo-grade dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ---- figura dos pontos de dureza ---- */
+.rel-figura {
+  padding: 10px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: #fff;
+  text-align: center;
+}
+
+.rel-figura img {
+  max-height: 280px;
+}
+
+/* ---- tabela de leituras: pintura ao vivo conforme a especificação ---- */
+.rel-medicoes input {
+  min-height: 38px;
+  padding: 6px 8px;
+}
+
+.rel-medicoes td:first-child {
+  min-width: 170px;
+}
+
+.rel-leitura {
+  min-width: 70px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.rel-leitura-ok {
+  border-color: var(--ok) !important;
+  background: var(--ok-fundo) !important;
+  color: var(--ok);
+}
+
+.rel-leitura-fora,
+.rel-leitura-invalido {
+  border-color: var(--erro) !important;
+  background: var(--erro-fundo) !important;
+  color: var(--erro);
+}
+
+/* ---- caixa de status (dureza e verificação pós-TT) ---- */
+.rel-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--borda);
+  border-left-width: 4px;
+  border-radius: var(--raio);
+  background: var(--superficie-2);
+}
+
+.rel-status strong {
+  font-size: 18px;
+}
+
+.rel-status-ok {
+  border-color: var(--ok);
+  background: var(--ok-fundo);
+}
+
+.rel-status-ok strong {
+  color: var(--ok);
+}
+
+.rel-status-erro {
+  border-color: var(--erro);
+  background: var(--erro-fundo);
+}
+
+.rel-status-erro strong {
+  color: var(--erro);
+}
+
+.rel-status-alerta {
+  border-color: var(--alerta-borda);
+  background: var(--alerta-fundo);
+}
+
+.rel-status-alerta strong {
+  color: var(--alerta);
+}
+
+.rel-numero-grande {
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ---- atalhos para os outros lotes da carga (RIP-35) ---- */
+.rel-atalhos .chip {
+  text-decoration: none;
+}
+
+.rel-feito {
+  opacity: 0.6;
+}
+
+/* ---- lotes do relatório de TT ---- */
+.rel-lotes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rel-lote {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie-2);
+}
+
+.rel-lote-principal {
+  border-color: var(--info);
+  background: var(--info-fundo);
+}
+
+.rel-tabela-tt th[scope='row'] {
+  white-space: nowrap;
+}
+
+.rel-tabela-tt input {
+  min-height: 38px;
+  text-align: center;
+}
+
+/* ---- caixas de imagem (Ctrl+V / duplo clique) ---- */
+.rel-slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.rel-slot-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rel-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  padding: 8px;
+  border: 2px dashed var(--borda-forte);
+  border-radius: var(--raio-painel);
+  background: var(--superficie-2);
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.rel-slot:focus-visible,
+.rel-slot-arrastando {
+  outline: none;
+  border-color: var(--foco);
+  box-shadow: 0 0 0 3px rgba(31, 111, 209, 0.25);
+}
+
+.rel-slot-com-imagem {
+  padding: 0;
+  border-style: solid;
+  border-color: var(--info);
+  background: #fff;
+}
+
+.rel-slot img {
+  display: block;
+  max-height: 160px;
+  margin: 0 auto;
+}
+
+.rel-slot-texto {
+  color: var(--tinta-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.rel-slot-acoes {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rel-slot-acoes .dica {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- inspeção visual ---- */
+.rel-resultado {
+  font-weight: 700;
+}
+
+.rel-resultado-ok {
+  color: var(--ok);
+}
+
+.rel-resultado-erro {
+  color: var(--erro);
+}
+
+.rel-resultado-alerta {
+  color: var(--alerta);
+}
+
+.rel-laser {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  padding: 12px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie-2);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.rel-rodape .acoes {
+  margin-top: 0;
+}
+
+@media (max-width: 900px) {
+  .rel-slots {
+    grid-template-columns: 1fr;
+  }
+}

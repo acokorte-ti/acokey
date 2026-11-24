@@ -13,12 +13,14 @@ nomes do cliente e de funcionários). Ver `.gitignore` e o aviso no topo do `CLA
 
 | Fase | O que entra | Situação |
 |---|---|---|
-| 1. Base | Login, sessões, CSRF, usuários e permissões, auditoria, modelo de dados completo, carga do sistema antigo, painel (kanban) e página do lote **só para consulta** | **pronta** |
-| 2. Registro das etapas | Formulários de cada etapa, envio de anexos, aprovação por anexo, avanço do lote, abertura automática de NC | a fazer |
-| 3. Não conformidades | Decisão de disposição (retrabalho, sucata, uso como está, anulada) e correção de dureza | a fazer |
-| 4. Relatórios em PDF | Dureza (RIP-35), Tratamento Térmico, Visual, databook, conferência do databook e verificação dimensional (reaproveitar `legado/relatorios_sistema.py`, `databook.py`, `conferencia_databook.py`, `verificacao_dimensional.py`) | a fazer |
-| 5. Demais módulos | Matéria-prima (carimbo), cargas de TT, envios a prestador (e o modelo da Priner), ordem de faturamento, databooks enviados, especificações, cadastros, painéis (dashboard, Gantt, KPIs, indicadores), exportação Excel | a fazer |
-| 6. Virada | Homologação no system-lab, carga final dos dados reais, desligamento do notebook | a fazer |
+| 1. Base | Login, sessões, CSRF, usuários e permissões, auditoria, modelo de dados completo, carga do sistema antigo | **pronta** |
+| 2. Lote e etapas | Novo/editar/cancelar lote, formulários de cada etapa (verde/vermelho ao vivo pela especificação), aprovação por documento, anexos e fotos, avanço, importação em massa, PDF do registro, NC automática | **pronta** |
+| 3. Qualidade | Não conformidades (4 disposições, correção de dureza), especificações, verificação dimensional RIP-33A | **pronta** |
+| 4. Relatórios e databook | Dureza RIP-35, Tratamento Térmico (por carga), Visual, databook (capa, índice, anexos), conferência, controle "Enviado-DB" | **pronta** |
+| 5. Demais módulos | Matéria-prima (carimbo e propagação), cadastros, ordens de produção (importação da planilha), parâmetros, assinaturas, cargas de TT, envios a prestador (PDF e modelo do laboratório), ordem de faturamento, início, painel com alertas, dashboard, Gantt, KPIs, indicadores, busca (Ctrl+K), exportações Excel | **pronta** |
+| 6. Mega | Leitura das OPs, faturamento e notas de entrada do ERP | infraestrutura pronta, desligada; falta mapear as tabelas |
+| 7. Visita guiada e manual | Tutorial por tela (o antigo tinha 25) e manual do usuário | a fazer |
+| 8. Virada | Homologação no system-lab, carga final dos dados reais, desligamento do notebook | a fazer |
 
 Até a virada, o sistema antigo continua em uso no notebook da Qualidade. A carga pode ser repetida (com o banco
 novo vazio) quantas vezes for preciso.
@@ -183,6 +185,42 @@ GPG/AES256 (banco guardado 30 dias, arquivos 7 dias, uma cópia mensal de cada p
 `~/.config/acokey/backup.env` (`BACKUP_GPG_SENHA=...`, permissão 600) — **guarde uma cópia no cofre de
 senhas; sem ela o backup não abre**. `deploy/backup/restaurar.sh <arquivo>` restaura o banco em um banco de
 conferência e mostra as contagens.
+
+## Decisões pendentes (com a Qualidade)
+
+O sistema novo já funciona assim; cada item pode ser revertido se a Qualidade preferir o comportamento antigo.
+
+1. **Relatórios gerados pelo sistema (Dureza RIP-35, TT, Visual)** estão ligados para todos. No antigo só
+   funcionavam no modo de teste.
+2. **Registro do tratamento térmico é sempre aprovado**, mesmo quando a dureza medida depois do TT dá reprovada
+   (a reprovação aparece só no PDF), como no antigo.
+3. **Databook do ARK:** a seção 08 sai "Oxidação Negra", as seções de etapas que não se aplicam ao ARK ficam de
+   fora e o checklist não cobra dureza e tração. O antigo misturava.
+4. **Limites da especificação travados:** quando o limite está cadastrado, o formulário da etapa usa o valor do
+   cadastro e não deixa mudar; só o limite não cadastrado é digitado.
+5. **Lote cancelado** tem o número trocado por `<número>-CANC<id>`, para o número voltar a ficar livre (o original
+   fica na linha do tempo e na auditoria).
+6. **Tirar um lote de uma carga de TT, envio ou OF** em edição apaga só o vínculo (com antes/depois na auditoria).
+7. **Modelo do laboratório (.docx):** só as células marcadas "Preencher" são preenchidas (data e identificação).
+   Material, ensaio e norma são texto fixo do modelo; para o sistema preenchê-los, marque essas células como
+   "Preencher" no modelo.
+8. **Reabrir NC e corrigir dureza** exigem "pode aprovar" (o antigo exigia só o módulo Qualidade).
+
+## Mega (ERP, somente leitura) — desligado até o mapeamento
+
+Mesmo padrão do EstoqueACK e dos Indicadores de Manutenção: usuário de banco **próprio deste sistema**
+(`acokey_ro`), só com SELECT nas tabelas usadas, conexão em modo thick a partir do system-lab, toda sessão em
+`SET TRANSACTION READ ONLY`. O sistema copia o que lê para o PostgreSQL e nunca grava no ERP.
+
+O que deve vir do Mega: as ordens de produção (hoje vêm da planilha de OPs: cliente, item, descrição, quantidade,
+PIV, PO, NF e faturamento), fornecedores e NF de entrada da matéria-prima e, talvez, a NF de saída da OF. Nenhuma
+tabela do Mega foi mapeada ainda.
+
+1. O DBA roda os blocos A e B de `scripts/mega/01_criar_usuario_leitura.sql` (leitura ampla só para o mapeamento).
+2. No servidor: `deploy/configurar_mega.sh` (pede a senha sem mostrar, grava no `.env` e testa) e
+   `docker compose exec api python -m app.mega testar`.
+3. Mapeamento das tabelas; as consultas entram em `backend/app/mega.py`.
+4. O DBA roda os blocos C (SELECT só nas tabelas usadas) e D (revoga a leitura ampla); `MEGA_HABILITADO=true`.
 
 Socorro, quando ninguém consegue entrar:
 

@@ -2,7 +2,8 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Cabecalho, Carregando, ErroCarga, Vazio } from '../componentes/Estados';
 import { Paginacao } from '../componentes/Tabela';
-import { api, consulta } from '../lib/api';
+import { api, baixarArquivo, consulta, mensagemDeErro } from '../lib/api';
+import { useAvisos } from '../lib/avisos';
 import { dataHoraSistema, inteiro } from '../lib/formato';
 import type { ListaAuditoria, ListaLotes, RegistroAuditoria } from '../lib/tipos';
 import { useAtrasado, useCarga } from '../lib/useCarga';
@@ -30,13 +31,26 @@ const ACOES: Record<string, string> = {
   avancar: 'Avançou de etapa',
   abrir: 'Abriu',
   decidir: 'Decidiu',
-  encerrar: 'Encerrou',
-  status: 'Mudou a situação',
-  importar: 'Importou',
-  enviar: 'Enviou',
+  anexar: 'Anexou',
+  anular: 'Anulou (erro de digitação)',
+  cancelar: 'Cancelou',
+  carimbar: 'Carimbou e aprovou',
+  concluir: 'Concluiu',
+  corrigir: 'Corrigiu',
   desfazer: 'Desfez',
-  gerar_pdf: 'Gerou PDF',
-  gerar_docx: 'Gerou documento Word',
+  encerrar: 'Encerrou',
+  enviar: 'Marcou como enviado',
+  gerar: 'Gerou',
+  gerar_docx: 'Gerou o documento do laboratório',
+  gerar_pdf: 'Gerou o PDF',
+  importar: 'Importou',
+  reabrir: 'Reabriu',
+  registrar: 'Registrou',
+  remover: 'Removeu',
+  carga_inicial: 'Carga do sistema antigo',
+  socorro_desbloquear: 'Desbloqueou (linha de comando)',
+  socorro_senha_provisoria: 'Senha provisória (linha de comando)',
+  status: 'Mudou a situação',
 };
 
 const ENTIDADES: Record<string, string> = {
@@ -46,6 +60,22 @@ const ENTIDADES: Record<string, string> = {
   registro: 'Registro de etapa',
   anexo: 'Anexo',
   nc: 'Não conformidade',
+  anexo_mp: 'Certificado de matéria-prima',
+  carga_tt: 'Carga de TT',
+  databook: 'Databook',
+  databook_envio: 'Envio de databook',
+  envio_prestador: 'Envio a prestador',
+  especificacao: 'Especificação',
+  especificacao_cotas: 'Cotas do desenho',
+  foto_envio: 'Foto de envio',
+  materia_prima: 'Matéria-prima',
+  ordem_faturamento: 'Ordem de faturamento',
+  ordem_producao: 'Ordem de produção',
+  parametro: 'Parâmetro',
+  equipamento: 'Equipamento',
+  prestador: 'Prestador',
+  fornecedor_mp: 'Fornecedor de MP',
+  sistema: 'Sistema',
 };
 
 /** Ações que significam acesso recusado: aparecem em vermelho. */
@@ -204,6 +234,21 @@ export function Auditoria() {
   );
   const numeroDoLote = useMemo(() => new Map(lotesOrdenados.map((l) => [l.id, l.numero])), [lotesOrdenados]);
 
+  const avisos = useAvisos();
+  const [exportando, setExportando] = useState(false);
+
+  /** A planilha sai com os MESMOS filtros da lista na tela. */
+  async function exportar() {
+    setExportando(true);
+    try {
+      await baixarArquivo(`/auditoria/exportar.xlsx${consulta({ de, ate, login: login.trim(), acao, entidade, lote_id: loteId })}`);
+    } catch (erro) {
+      avisos.erro(`Não foi possível gerar a planilha: ${mensagemDeErro(erro)}`);
+    } finally {
+      setExportando(false);
+    }
+  }
+
   function filtrar(acaoFiltro: () => void) {
     acaoFiltro();
     setPagina(1);
@@ -230,7 +275,17 @@ export function Auditoria() {
 
   return (
     <>
-      <Cabecalho titulo="Auditoria" apoio="Registro de quem fez o quê, e quando." />
+      <Cabecalho titulo="Auditoria" apoio="Registro de quem fez o quê, e quando.">
+        <button
+          type="button"
+          className="botao"
+          onClick={() => void exportar()}
+          disabled={exportando}
+          title="Baixa em Excel os registros com os filtros escolhidos (até 50.000)"
+        >
+          {exportando ? 'Gerando planilha…' : 'Exportar Excel'}
+        </button>
+      </Cabecalho>
 
       <div className="filtros" role="search" aria-label="Filtros da auditoria">
         <div className="campo">

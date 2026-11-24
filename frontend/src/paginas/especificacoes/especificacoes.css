@@ -1,0 +1,61 @@
+/* Especificações (limites por tipo e cotas por item). Classes com prefixo esp-. */
+
+.esp-tipo > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.esp-tipo[open] > summary {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--borda);
+}
+
+.esp-grupo {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.esp-grupo > legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--tinta);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.esp-invalido {
+  border-color: var(--erro) !important;
+  background: var(--erro-fundo) !important;
+}
+
+.esp-cotas td {
+  padding: 4px 6px;
+}
+
+.esp-cotas input {
+  min-height: 36px;
+  padding: 4px 8px;
+}
+
+.esp-cotas td:first-child {
+  min-width: 240px;
+}
+
+.esp-cotas td:nth-child(n + 2):nth-child(-n + 4) input {
+  width: 120px;
+  font-family: var(--fonte-mono);
+}
+
+.esp-acao-linha {
+  width: 1%;
+  white-space: nowrap;
+}
+
+#cotas {
+  scroll-margin-top: calc(var(--topo) + 12px);
+}

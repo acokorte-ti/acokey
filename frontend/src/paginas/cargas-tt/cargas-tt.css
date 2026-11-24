@@ -1,0 +1,167 @@
+/* Cargas de tratamento térmico. Classes com o prefixo ctt-. */
+
+/* ---- lista ---- */
+.ctt-aba {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ctt-contagem {
+  min-width: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--neutro-fundo);
+  color: var(--tinta-2);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.aba-atual .ctt-contagem {
+  background: var(--destaque);
+  color: #fff;
+}
+
+.ctt-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ctt-cartao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.ctt-cartao > * + * {
+  margin-top: 0;
+}
+
+.ctt-cartao-corpo {
+  flex: 1;
+  min-width: 240px;
+}
+
+.ctt-cartao-corpo > * + * {
+  margin-top: 4px;
+}
+
+.ctt-cartao-titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.ctt-numero {
+  font-family: var(--fonte-mono);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ctt-lotes-linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+/* ---- formulário ---- */
+.ctt-form {
+  max-width: 1100px;
+}
+
+.ctt-opcoes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ctt-opcoes > li {
+  padding: 4px 12px 8px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+}
+
+.ctt-opcoes > li:hover {
+  border-color: var(--borda-forte);
+}
+
+.ctt-opcao-marcada {
+  border-color: var(--info) !important;
+  background: var(--info-fundo) !important;
+}
+
+.ctt-opcoes .marcacao {
+  width: 100%;
+}
+
+.ctt-opcao-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--tinta-3);
+  font-size: 12.5px;
+}
+
+.ctt-ja-em-carga {
+  color: var(--info);
+}
+
+.ctt-instrucoes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ctt-instrucoes li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: var(--raio);
+  background: var(--superficie-2);
+}
+
+/* ---- detalhe ---- */
+.ctt-grade-lotes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ctt-lote {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-painel);
+  background: var(--superficie-2);
+}
+
+.ctt-observacoes {
+  white-space: pre-wrap;
+}

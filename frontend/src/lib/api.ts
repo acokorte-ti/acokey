@@ -119,6 +119,92 @@ export async function api<T>(caminho: string, opcoes: OpcoesChamada = {}): Promi
   return (await resposta.json()) as T;
 }
 
+/**
+ * Envia arquivos (multipart/form-data) junto com campos de texto. Mesmo tratamento de sessão, CSRF e erros de `api`.
+ * Ex.: enviarArquivos('/lotes/7/etapas/receb_mp/anexos', { arquivos: lista, sub: '' })
+ */
+export async function enviarArquivos<T>(
+  caminho: string,
+  campos: Record<string, string | number | boolean | Blob | Blob[] | null | undefined>,
+  opcoes: { metodo?: 'POST' | 'PUT'; sinal?: AbortSignal } = {},
+): Promise<T> {
+  const formulario = new FormData();
+  for (const [chave, valor] of Object.entries(campos)) {
+    if (valor === null || valor === undefined) continue;
+    if (Array.isArray(valor)) {
+      for (const item of valor) formulario.append(chave, item, item instanceof File ? item.name : undefined);
+    } else if (valor instanceof Blob) {
+      formulario.append(chave, valor, valor instanceof File ? valor.name : undefined);
+    } else {
+      formulario.append(chave, String(valor));
+    }
+  }
+  const cabecalhos: Record<string, string> = { Accept: 'application/json' };
+  if (csrf) cabecalhos['X-CSRF-Token'] = csrf;
+
+  let resposta: Response;
+  try {
+    // Sem Content-Type: o navegador põe o multipart com a fronteira certa
+    resposta = await fetch(`/api${caminho}`, {
+      method: opcoes.metodo ?? 'POST',
+      credentials: 'same-origin',
+      headers: cabecalhos,
+      body: formulario,
+      signal: opcoes.sinal,
+    });
+  } catch (erro) {
+    if (erro instanceof DOMException && erro.name === 'AbortError') throw erro;
+    throw new ErroApi(0, 'Não foi possível enviar o arquivo. Confira a rede e tente de novo.');
+  }
+  if (!resposta.ok) {
+    const detalhe = await lerDetalhe(resposta);
+    if (resposta.status === 401) tratadores.aoPerderSessao();
+    if (resposta.status === 403 && detalhe === 'TROCAR_SENHA') {
+      tratadores.aoExigirTrocaSenha();
+      throw new ErroApi(403, 'Antes de continuar, é preciso trocar a senha.');
+    }
+    if (resposta.status === 413) throw new ErroApi(413, detalhe ?? 'O arquivo é grande demais.');
+    throw new ErroApi(resposta.status, detalhe ?? mensagemPadrao(resposta.status));
+  }
+  if (resposta.status === 204) return undefined as T;
+  return (await resposta.json()) as T;
+}
+
+/**
+ * Baixa um arquivo gerado por POST (ex.: exportação) ou GET autenticado, salvando com o nome que o servidor mandar.
+ * Para só abrir um PDF/anexo, prefira um <a href={enderecoApi(...)} target="_blank">.
+ */
+export async function baixarArquivo(caminho: string, opcoes: { metodo?: Metodo; corpo?: unknown } = {}): Promise<void> {
+  const metodo = opcoes.metodo ?? 'GET';
+  const cabecalhos: Record<string, string> = {};
+  if (opcoes.corpo !== undefined) cabecalhos['Content-Type'] = 'application/json';
+  if (metodo !== 'GET' && csrf) cabecalhos['X-CSRF-Token'] = csrf;
+  const resposta = await fetch(`/api${caminho}`, {
+    method: metodo,
+    credentials: 'same-origin',
+    headers: cabecalhos,
+    body: opcoes.corpo !== undefined ? JSON.stringify(opcoes.corpo) : undefined,
+  });
+  if (!resposta.ok) {
+    const detalhe = await lerDetalhe(resposta);
+    if (resposta.status === 401) tratadores.aoPerderSessao();
+    throw new ErroApi(resposta.status, detalhe ?? mensagemPadrao(resposta.status));
+  }
+  const disposicao = resposta.headers.get('content-disposition') ?? '';
+  const nome =
+    decodeURIComponent(/filename\*=UTF-8''([^;]+)/i.exec(disposicao)?.[1] ?? '') ||
+    /filename="?([^";]+)"?/i.exec(disposicao)?.[1] ||
+    'arquivo';
+  const url = URL.createObjectURL(await resposta.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = nome;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 /** Texto de um erro qualquer, para mostrar na tela. */
 export function mensagemDeErro(erro: unknown): string {
   if (erro instanceof Error && erro.message) return erro.message;

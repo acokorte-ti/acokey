@@ -74,7 +74,12 @@ Padrão de referência dos sistemas internos: `..\manut-mtbf-mttr\` (mais comple
 
 ## 5. Próximo passo
 
-Fase 2 (registro das etapas). Portar de `legado/app.py`: `ver_etapa`, `registrar`, `anexar`,
-`fotos_registro`, `avancar`, `_abrir_nc_automatica`, `_fechar_nc_se_aberta`. Pontos que o sistema antigo
-fazia mal e não devem voltar: responsável digitado à mão (usar o usuário logado), numeração de NC por
-"consulta + 1" (duas pessoas ao mesmo tempo geram o mesmo número), upload sem limite de tamanho.
+Todos os módulos do sistema antigo foram portados (ver tabela no README). Faltam: visita guiada por tela
+(o Início já dispara o evento `acokey:visita-guiada`; o antigo usava driver.js com 25 tours), manual do usuário
+atualizado, mapeamento das tabelas do Mega e a homologação no system-lab. Decisões em aberto com a Qualidade
+estão no fim do README ("Decisões pendentes").
+
+Estrutura por módulo: backend `app/api_<modulo>.py` (+ auxiliares) e `tests/test_<modulo>.py`; front
+`src/paginas/<modulo>/` com `index.tsx` (sub-rotas), `tipos.ts` e CSS próprio com prefixo. O `App.tsx` carrega
+cada módulo sob demanda. Peças comuns: `arquivos.py`, `numeracao.py`, `nc.py`, `lotes.py`, `parametros.py`,
+`pdf_comum.py`, `historico.py`; no front `EnvioArquivos.tsx` e `lib/teclado.ts`.

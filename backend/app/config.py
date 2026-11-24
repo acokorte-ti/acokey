@@ -27,6 +27,15 @@ class Config(BaseSettings):
     login_bloqueio_minutos: int = 15
     senha_tamanho_minimo: int = 10
 
+    # ERP Mega (Oracle), SOMENTE LEITURA, com usuário próprio deste sistema (acokey_ro). Desligado até o
+    # mapeamento das tabelas: ver backend/app/mega.py e scripts/mega/01_criar_usuario_leitura.sql
+    mega_habilitado: bool = False
+    mega_dsn: str = ""
+    mega_usuario: str = ""
+    mega_senha: str = ""
+    mega_instant_client: str = "/opt/instantclient"
+    mega_esquema: str = "ACOKORTE"  # dono das tabelas do ERP
+
     @property
     def producao(self) -> bool:
         return self.app_env == "producao"

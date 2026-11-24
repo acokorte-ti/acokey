@@ -1,0 +1,729 @@
+/*
+ * Painéis gerenciais (dashboard, Gantt, KPIs, indicadores) e os gráficos deles.
+ * Prefixos: pn- (comuns), graf- (gráficos), dash- (dashboard), gantt-, kpi-, ind- (indicadores).
+ *
+ * Cores das MARCAS dos gráficos: PIN, BOX e ARK com os tons do sistema antigo, mais vivos que os de texto
+ * (--pin/--box/--ark de estilos.css). Conferidas com o validador de paleta (daltonismo no limite: por isso
+ * todo gráfico tem legenda, rótulo e dica, nunca só a cor).
+ */
+:root {
+  --graf-pin: #2874a6;
+  --graf-box: #d35400;
+  --graf-ark: #1e8a4c;
+  --graf-um: #2f5d8a; /* gráfico de uma série só */
+  --graf-enviado: #7e57c2; /* Enviado-DB: o mesmo roxo do sistema antigo */
+  --graf-enviado-fundo: #f1ebfb;
+  --graf-grade: #e8eaed;
+  --graf-eixo: #646a71;
+}
+
+/* ---------------------------------------------------------------- comuns */
+
+.pn-cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.pn-numero {
+  border-left-width: 4px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.pn-numero-link:hover {
+  border-color: var(--tinta);
+  color: inherit;
+}
+
+.pn-numero-andamento {
+  border-left-color: var(--info);
+}
+
+.pn-numero-concluido {
+  border-left-color: var(--ok);
+}
+
+.pn-numero-enviado {
+  border-left-color: var(--graf-enviado);
+}
+
+.pn-numero-pin {
+  border-left-color: var(--graf-pin);
+}
+
+.pn-numero-box {
+  border-left-color: var(--graf-box);
+}
+
+.pn-numero-ark {
+  border-left-color: var(--graf-ark);
+}
+
+.pn-tendencia {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pn-tendencia-subiu {
+  color: var(--ok);
+}
+
+.pn-tendencia-caiu {
+  color: var(--erro);
+}
+
+.pn-tendencia-igual {
+  color: var(--tinta-3);
+}
+
+.pn-tendencia-novo {
+  color: var(--graf-enviado);
+}
+
+.pn-tendencia-ref {
+  color: var(--tinta-3);
+  font-weight: 400;
+}
+
+.pn-selo-enviado {
+  background: var(--graf-enviado-fundo);
+  color: #4a2e82;
+}
+
+.pn-selo-enviado::before {
+  -webkit-mask-image: var(--ic-ok);
+  mask-image: var(--ic-ok);
+}
+
+.pn-recolhivel {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-painel);
+}
+
+.pn-recolhivel > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 14px 20px;
+  cursor: pointer;
+  color: var(--tinta);
+  font-weight: 700;
+}
+
+.pn-recolhivel[open] > summary {
+  border-bottom: 1px solid var(--borda);
+}
+
+.pn-recolhivel-corpo {
+  padding: 16px 20px 20px;
+}
+
+.pn-aviso-ocultos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+/* ---------------------------------------------------------------- gráficos */
+
+.graf-grade-cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 16px;
+}
+
+.graf-largo {
+  grid-column: 1 / -1;
+}
+
+.graf-cartao {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.graf-titulo {
+  font-size: 15px;
+}
+
+.graf-vazio {
+  padding: 28px 8px;
+  color: var(--tinta-3);
+  font-size: 13px;
+  text-align: center;
+}
+
+.graf-quadro {
+  position: relative;
+}
+
+.graf-quadro > * + * {
+  margin-top: 10px;
+}
+
+.graf-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 13px;
+  color: var(--tinta-2);
+}
+
+.graf-legenda li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.graf-amostra {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.graf-legenda-extra {
+  color: var(--tinta-3);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+}
+
+/* Barras horizontais: rótulo à esquerda, barra e número à direita */
+.graf-barras {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.graf-barras-item {
+  display: grid;
+  grid-template-columns: minmax(90px, 9.5rem) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.graf-barras-rotulo {
+  color: var(--tinta);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.graf-barras-trilhos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.graf-trilho {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+}
+
+.graf-barras-grupo .graf-trilho {
+  min-height: 14px;
+}
+
+.graf-barra {
+  flex: none;
+  height: 18px;
+  min-width: 2px;
+  border-radius: 0 4px 4px 0;
+  cursor: default;
+}
+
+.graf-barras-grupo .graf-barra {
+  height: 12px;
+}
+
+.graf-barra:hover,
+.graf-barra:focus-visible,
+.graf-parte:hover,
+.graf-parte:focus-visible {
+  filter: brightness(1.12);
+}
+
+.graf-barra-valor {
+  color: var(--tinta-2);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Colunas por mês (SVG) */
+.graf-svg {
+  width: 100%;
+  min-width: 0;
+}
+
+.graf-svg svg {
+  display: block;
+  overflow: visible;
+}
+
+.graf-grade {
+  stroke: var(--graf-grade);
+  stroke-width: 1;
+}
+
+.graf-base {
+  stroke: var(--borda-forte);
+  stroke-width: 1;
+}
+
+.graf-eixo {
+  fill: var(--graf-eixo);
+  font-family: var(--fonte-mono);
+  font-size: 11px;
+}
+
+.graf-valor {
+  fill: var(--tinta);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.graf-alvo {
+  fill: transparent;
+  outline: none;
+}
+
+.graf-alvo:hover,
+.graf-alvo:focus-visible {
+  fill: rgba(29, 31, 34, 0.05);
+}
+
+.graf-alvo:focus-visible {
+  stroke: var(--foco);
+  stroke-width: 2;
+}
+
+.graf-coluna {
+  pointer-events: none;
+}
+
+/* Barra dividida (parte de um todo) */
+.graf-dividida {
+  display: flex;
+  gap: 2px;
+  height: 30px;
+}
+
+.graf-parte {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3px;
+  color: #ffffff;
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.graf-parte:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.graf-parte:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.graf-parte:only-child {
+  border-radius: 4px;
+}
+
+/* Dica (tooltip): valor em destaque, nome da série depois */
+.graf-dica {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border-radius: var(--raio);
+  background: #1d1f22;
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.35;
+  transform: translate(-50%, calc(-100% - 8px));
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+
+.graf-dica-titulo {
+  color: #c9cdd2;
+  font-weight: 600;
+}
+
+.graf-dica-linha {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.graf-dica-linha strong {
+  font-family: var(--fonte-mono);
+}
+
+.graf-dica-traco {
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.graf-tabela > summary {
+  width: fit-content;
+  color: var(--tinta-3);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.graf-tabela[open] > summary {
+  margin-bottom: 8px;
+}
+
+/* ---------------------------------------------------------------- dashboard */
+
+.dash-setores {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 14px;
+}
+
+.dash-setor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dash-setor-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dash-setor-topo h3 {
+  font-size: 15px;
+}
+
+.dash-setor-n {
+  color: var(--tinta);
+  font-family: var(--fonte-mono);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: right;
+}
+
+.dash-setor-n small {
+  display: block;
+  color: var(--tinta-3);
+  font-family: var(--fonte);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.dash-setor-enviado {
+  border-top: 3px solid var(--graf-enviado);
+}
+
+.dash-setor-concluido {
+  border-top: 3px solid var(--ok);
+}
+
+.dash-bolhas {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px;
+  min-height: 56px;
+}
+
+.dash-bolha {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #ffffff;
+  font-family: var(--fonte-mono);
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: 0 0 0 2px var(--superficie);
+  transition: transform 0.12s;
+}
+
+.dash-bolha:hover,
+.dash-bolha:focus-visible {
+  z-index: 2;
+  color: #ffffff;
+  transform: scale(1.15);
+}
+
+.dash-bolha small {
+  margin-top: 2px;
+  font-size: 0.5em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.dash-bolha-pin {
+  background: var(--graf-pin);
+}
+
+.dash-bolha-box {
+  background: var(--graf-box);
+}
+
+.dash-bolha-ark {
+  background: var(--graf-ark);
+}
+
+.dash-bolha-feita {
+  opacity: 0.6;
+}
+
+.dash-bolha-nc {
+  box-shadow:
+    0 0 0 2px var(--superficie),
+    0 0 0 4px var(--erro);
+}
+
+/* Dica da bolha (o texto completo também está no aria-label do link) */
+.dash-bolha[data-dica]:hover::after,
+.dash-bolha[data-dica]:focus-visible::after {
+  content: attr(data-dica);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 10;
+  min-width: 190px;
+  padding: 8px 10px;
+  border-radius: var(--raio);
+  background: #1d1f22;
+  color: #ffffff;
+  font-family: var(--fonte);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  white-space: pre-line;
+  transform: translateX(-50%) scale(0.87);
+  pointer-events: none;
+}
+
+.dash-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  font-size: 13px;
+}
+
+.dash-legenda .nota-discreta {
+  margin-left: auto;
+}
+
+.dash-ponto {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: -1px;
+}
+
+.dash-vazio {
+  color: var(--tinta-3);
+  font-size: 12.5px;
+}
+
+/* ---------------------------------------------------------------- Gantt */
+
+.gantt-rolagem {
+  position: relative;
+  max-height: 75vh;
+  overflow: auto;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+}
+
+.gantt-tabela {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
+}
+
+.gantt-tabela thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--borda);
+  background: var(--superficie-2);
+  color: var(--tinta);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  vertical-align: bottom;
+}
+
+.gantt-tabela td,
+.gantt-tabela tbody th {
+  padding: 6px 5px;
+  font-weight: 400;
+  border-bottom: 1px solid var(--borda-suave);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.gantt-tabela tbody tr:hover td,
+.gantt-tabela tbody tr:hover th {
+  background: var(--superficie-2);
+}
+
+.gantt-tabela .gantt-op {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 220px;
+  max-width: 260px;
+  padding-left: 12px;
+  background: var(--superficie);
+  box-shadow: 1px 0 0 var(--borda);
+  text-align: left;
+}
+
+.gantt-tabela thead .gantt-op {
+  z-index: 3;
+  background: var(--superficie-2);
+  text-align: left;
+}
+
+.gantt-op-desc {
+  display: block;
+  overflow: hidden;
+  color: var(--tinta-3);
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.gantt-cel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  height: 26px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+a.gantt-cel:hover {
+  filter: brightness(1.08);
+}
+
+.gantt-aprovada {
+  background: var(--graf-ark);
+  color: #ffffff;
+}
+
+.gantt-atual {
+  background: var(--graf-um);
+  color: #ffffff;
+}
+
+.gantt-reprovada {
+  background: var(--erro);
+  color: #ffffff;
+}
+
+.gantt-pulada {
+  background: #f1c40f;
+  color: #5c4500;
+}
+
+.gantt-futura {
+  background: var(--neutro-fundo);
+  color: var(--tinta-3);
+}
+
+.gantt-nao_iniciado {
+  border: 1px dashed var(--borda-clara);
+  background: transparent;
+}
+
+.gantt-na {
+  background: transparent;
+  color: var(--borda-clara);
+}
+
+.gantt-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 12.5px;
+}
+
+.gantt-legenda .gantt-cel {
+  display: inline-flex;
+  min-width: 22px;
+  height: 14px;
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+.gantt-progresso {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.gantt-progresso progress {
+  width: 64px;
+}
+
+/* ---------------------------------------------------------------- KPIs */
+
+.kpi-filtro-ativo {
+  align-self: center;
+}
+
+.kpi-rodape {
+  color: var(--tinta-3);
+  font-size: 12.5px;
+  text-align: right;
+}
+
+/* ---------------------------------------------------------------- indicadores */
+
+.ind-pct {
+  font-family: var(--fonte-mono);
+}
+
+@media (max-width: 560px) {
+  .graf-barras-item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}

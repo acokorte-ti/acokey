@@ -1,0 +1,78 @@
+/* Verificação dimensional (RIP-33A). Classes com prefixo dim-. */
+
+.dim-numero-fora {
+  border-left: 4px solid var(--erro);
+}
+
+.dim-numero-fora .cartao-valor {
+  color: var(--erro);
+}
+
+.dim-numero-ok {
+  border-left: 4px solid var(--ok);
+}
+
+.dim-numero-ok .cartao-valor {
+  color: var(--ok);
+}
+
+.dim-numero-aviso {
+  border-left: 4px solid var(--alerta-borda);
+}
+
+.dim-lista,
+.dim-avisos {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dim-avisos {
+  gap: 4px;
+  color: var(--tinta-2);
+}
+
+.dim-fora {
+  padding: 12px 14px;
+  border: 1px solid #efb5b0;
+  border-left: 4px solid var(--erro);
+  border-radius: var(--raio);
+  background: var(--erro-fundo);
+}
+
+.dim-fora > * + * {
+  margin-top: 4px;
+}
+
+.dim-meta {
+  color: var(--tinta-2);
+  font-size: 13.5px;
+}
+
+.dim-valores-fora {
+  color: var(--erro);
+  font-family: var(--fonte-mono);
+  font-weight: 600;
+}
+
+.dim-tabela td,
+.dim-tabela th {
+  white-space: nowrap;
+}
+
+.dim-linha-fora > td:first-child {
+  box-shadow: inset 4px 0 0 var(--erro);
+}
+
+.dim-linha-aviso > td:first-child {
+  box-shadow: inset 4px 0 0 var(--alerta-borda);
+}
+
+.dim-celula-fora {
+  background: var(--erro-fundo);
+  color: var(--erro);
+  font-weight: 600;
+}

@@ -1,14 +1,38 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, lazy, Suspense, type ComponentType, type ErrorInfo, type ReactNode } from 'react';
 import { Link, Route, Routes } from 'react-router-dom';
 import { Cabecalho, Carregando, Vazio } from './componentes/Estados';
 import { Layout } from './componentes/Layout';
 import { useSessao } from './lib/sessao';
-import { Auditoria } from './paginas/Auditoria';
 import { MinhaConta, TrocaObrigatoria } from './paginas/Conta';
 import { Login } from './paginas/Login';
-import { Lote } from './paginas/Lote';
 import { Painel } from './paginas/Painel';
-import { Usuarios } from './paginas/Usuarios';
+
+/** Cada módulo só é baixado quando alguém abre a tela dele (o site abre mais rápido nos PCs da fábrica). */
+function sobDemanda<M extends Record<string, unknown>>(carregar: () => Promise<M>, nome: keyof M) {
+  return lazy(async () => ({ default: (await carregar())[nome] as ComponentType }));
+}
+const Auditoria = sobDemanda(() => import('./paginas/Auditoria'), 'Auditoria');
+const Equipamentos = sobDemanda(() => import('./paginas/cadastros'), 'Equipamentos');
+const FornecedoresMP = sobDemanda(() => import('./paginas/cadastros'), 'FornecedoresMP');
+const OrdensProducao = sobDemanda(() => import('./paginas/cadastros'), 'OrdensProducao');
+const Parametros = sobDemanda(() => import('./paginas/cadastros'), 'Parametros');
+const Prestadores = sobDemanda(() => import('./paginas/cadastros'), 'Prestadores');
+const ModuloCargasTT = sobDemanda(() => import('./paginas/cargas-tt'), 'ModuloCargasTT');
+const ModuloDatabooks = sobDemanda(() => import('./paginas/databooks'), 'ModuloDatabooks');
+const VerificarDimensional = sobDemanda(() => import('./paginas/dimensional'), 'VerificarDimensional');
+const ModuloEnvios = sobDemanda(() => import('./paginas/envios'), 'ModuloEnvios');
+const Especificacoes = sobDemanda(() => import('./paginas/especificacoes'), 'Especificacoes');
+const ModuloFaturamento = sobDemanda(() => import('./paginas/faturamento'), 'ModuloFaturamento');
+const Inicio = sobDemanda(() => import('./paginas/inicio'), 'Inicio');
+const ModuloLote = sobDemanda(() => import('./paginas/lotes'), 'ModuloLote');
+const ModuloMateriaPrima = sobDemanda(() => import('./paginas/materia-prima'), 'ModuloMateriaPrima');
+const ModuloNC = sobDemanda(() => import('./paginas/nc'), 'ModuloNC');
+const Dashboard = sobDemanda(() => import('./paginas/paineis'), 'Dashboard');
+const Gantt = sobDemanda(() => import('./paginas/paineis'), 'Gantt');
+const Indicadores = sobDemanda(() => import('./paginas/paineis'), 'Indicadores');
+const Kpis = sobDemanda(() => import('./paginas/paineis'), 'Kpis');
+const ModuloRelatorios = sobDemanda(() => import('./paginas/relatorios'), 'ModuloRelatorios');
+const Usuarios = sobDemanda(() => import('./paginas/Usuarios'), 'Usuarios');
 
 /** Se uma tela quebrar, mostra uma mensagem em vez de deixar a página em branco. */
 class LimiteDeErro extends Component<{ children: ReactNode }, { quebrou: boolean }> {
@@ -80,28 +104,43 @@ export function App() {
   return (
     <Layout>
       <LimiteDeErro>
+        {/*
+          Cada módulo é dono das suas sub-rotas (ex.: /envios/* → ModuloEnvios define /envios, /envios/novo,
+          /envios/:id). As permissões seguem o menu do sistema antigo; o backend confere de novo em cada chamada.
+        */}
+        <Suspense fallback={<Carregando />}>
         <Routes>
+          {/* Produção */}
           <Route path="/" element={<Painel />} />
-          <Route path="/lotes/:id" element={<Lote />} />
-          <Route
-            path="/auditoria"
-            element={
-              <Restrito permitido={pode.auditoria}>
-                <Auditoria />
-              </Restrito>
-            }
-          />
-          <Route
-            path="/usuarios"
-            element={
-              <Restrito permitido={pode.admin}>
-                <Usuarios />
-              </Restrito>
-            }
-          />
+          <Route path="/inicio" element={<Inicio />} />
+          <Route path="/lotes/:id/*" element={<ModuloLote />} />
+          <Route path="/relatorios/*" element={<ModuloRelatorios />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/gantt" element={<Gantt />} />
+          <Route path="/cargas-tt/*" element={<Restrito permitido={pode.tt}><ModuloCargasTT /></Restrito>} />
+          <Route path="/envios/*" element={<Restrito permitido={pode.expedicao}><ModuloEnvios /></Restrito>} />
+          <Route path="/faturamento/*" element={<Restrito permitido={pode.expedicao}><ModuloFaturamento /></Restrito>} />
+          <Route path="/kpis" element={<Restrito permitido={pode.kpis}><Kpis /></Restrito>} />
+          {/* Qualidade */}
+          <Route path="/materia-prima/*" element={<Restrito permitido={pode.qualidade}><ModuloMateriaPrima /></Restrito>} />
+          <Route path="/nao-conformidades/*" element={<Restrito permitido={pode.qualidade}><ModuloNC /></Restrito>} />
+          <Route path="/indicadores" element={<Restrito permitido={pode.qualidade}><Indicadores /></Restrito>} />
+          <Route path="/verificar-dimensional" element={<Restrito permitido={pode.qualidade}><VerificarDimensional /></Restrito>} />
+          <Route path="/equipamentos" element={<Restrito permitido={pode.equipamentos}><Equipamentos /></Restrito>} />
+          <Route path="/databooks/*" element={<Restrito permitido={pode.qualidade}><ModuloDatabooks /></Restrito>} />
+          <Route path="/auditoria" element={<Restrito permitido={pode.auditoria}><Auditoria /></Restrito>} />
+          {/* Cadastros */}
+          <Route path="/especificacoes" element={<Restrito permitido={pode.cadastros || pode.qualidade}><Especificacoes /></Restrito>} />
+          <Route path="/ordens-producao" element={<Restrito permitido={pode.cadastros}><OrdensProducao /></Restrito>} />
+          <Route path="/fornecedores-mp" element={<Restrito permitido={pode.cadastros}><FornecedoresMP /></Restrito>} />
+          <Route path="/prestadores" element={<Restrito permitido={pode.cadastros}><Prestadores /></Restrito>} />
+          {/* Administração */}
+          <Route path="/parametros" element={<Restrito permitido={pode.admin}><Parametros /></Restrito>} />
+          <Route path="/usuarios" element={<Restrito permitido={pode.admin}><Usuarios /></Restrito>} />
           <Route path="/conta" element={<MinhaConta />} />
           <Route path="*" element={<NaoEncontrada />} />
         </Routes>
+        </Suspense>
       </LimiteDeErro>
     </Layout>
   );

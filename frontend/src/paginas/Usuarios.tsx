@@ -10,6 +10,7 @@ import { dataHoraSistema, MODULOS, resumoDoAcesso, TRACO } from '../lib/formato'
 import { useSessao, useUsuario } from '../lib/sessao';
 import type { Modulo, Usuario, UsuarioAlteracao, UsuarioNovo } from '../lib/tipos';
 import { useCarga } from '../lib/useCarga';
+import { MiniaturaAssinatura, ModalAssinatura } from './cadastros/AssinaturaUsuario';
 
 /** Senha provisória fácil de ditar: letras e números sem os que se confundem (0/O, 1/l/I). */
 function gerarSenha(): string {
@@ -150,6 +151,9 @@ export function Usuarios() {
   /** Depois de criar ou redefinir: a senha provisória fica na tela até o administrador anotar. */
   const [entrega, setEntrega] = useState<{ login: string; nome: string; senha: string } | null>(null);
   const [copiada, setCopiada] = useState(false);
+  /** Assinatura digital: de quem está sendo trocada, e um número que muda a cada troca (a imagem não fica velha). */
+  const [assinando, setAssinando] = useState<Usuario | null>(null);
+  const [versaoAssinatura, setVersaoAssinatura] = useState(() => Date.now());
 
   async function copiarSenha(senha: string) {
     try {
@@ -197,6 +201,7 @@ export function Usuarios() {
         titulo: 'Assinatura',
         dica: 'Tem a imagem da assinatura digital cadastrada',
         valor: (u) => u.tem_assinatura,
+        celula: (u) => (u.tem_assinatura ? <MiniaturaAssinatura usuario={u} versao={versaoAssinatura} /> : TRACO),
       },
       {
         chave: 'situacao',
@@ -249,11 +254,14 @@ export function Usuarios() {
             <button type="button" className="botao botao-pequeno" onClick={() => abrir({ tipo: 'senha', usuario: u, senha: '' })}>
               Redefinir senha
             </button>
+            <button type="button" className="botao botao-pequeno" onClick={() => setAssinando(u)}>
+              Assinatura
+            </button>
           </span>
         ),
       },
     ],
-    [eu.id],
+    [eu.id, versaoAssinatura],
   );
 
   async function salvar() {
@@ -449,6 +457,20 @@ export function Usuarios() {
             </button>
           </div>
         </Modal>
+      )}
+
+      {assinando && (
+        <ModalAssinatura
+          usuario={assinando}
+          versao={versaoAssinatura}
+          aoFechar={() => setAssinando(null)}
+          aoMudar={(alterado) => {
+            setAssinando(null);
+            setVersaoAssinatura(Date.now());
+            if (alterado.id === eu.id) atualizarUsuario(alterado);
+            lista.recarregar();
+          }}
+        />
       )}
     </>
   );

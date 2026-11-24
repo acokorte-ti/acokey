@@ -66,6 +66,7 @@ from app.models import (
     OrdemFaturamento,
     OrdemFaturamentoLote,
     OrdemProducao,
+    Parametro,
     Prestador,
     Registro,
     Usuario,
@@ -108,7 +109,7 @@ class Relatorio:
         if len(self.arquivos_faltando) > 30:
             linhas.append(f"  ... e mais {len(self.arquivos_faltando) - 30}")
         if self.nao_referenciados:
-            linhas.append("\nArquivos da pasta de dados que o banco não referencia (ficam só no sistema antigo):")
+            linhas.append("\nArquivos da pasta de dados que o banco não referencia (copiados no mesmo caminho):")
             linhas += [f"  {pasta:28} {n:6}" for pasta, n in sorted(self.nao_referenciados.items())]
         for titulo, itens in (("Avisos", self.avisos), ("Pendências (a carga segue)", self.pendencias),
                               ("BLOQUEIOS (corrija antes de gravar)", self.bloqueios)):  # fmt: skip
@@ -698,14 +699,62 @@ def montar(
         ))  # fmt: skip
     rel.contar("auditoria", len(plano.auditoria))
 
-    # --- arquivos da pasta de dados que nenhum registro usa (só para informação)
-    ignorar = re.compile(r"(^sistema.*\.db$|\.cfg$|\.log$|-journal$|-wal$|-shm$)", re.IGNORECASE)
-    for p in (raiz / pasta_dados).rglob("*"):
-        if p.is_file() and not ignorar.search(p.name):
-            relativo = p.relative_to(raiz / pasta_dados).as_posix()
-            if relativo.lower() not in referenciados:
-                pasta = "/".join(relativo.split("/")[:1]) + ("/<id>/" + relativo.split("/")[2] if relativo.count("/") >= 3 else "")
-                rel.nao_referenciados[pasta] = rel.nao_referenciados.get(pasta, 0) + 1
+    # --- arquivos da pasta de dados que nenhum registro usa: copiados no mesmo caminho relativo, porque o
+    # sistema antigo os usa por convenção de pasta (databooks gerados, fotos do visual, gráficos do forno)
+    ignorar = re.compile(r"(^sistema.*\.db$|\.cfg$|\.log$|-journal$|-wal$|-shm$|^_cadastro_.*_upload)", re.IGNORECASE)
+    for p in sorted((raiz / pasta_dados).rglob("*")):
+        relativo = p.relative_to(raiz / pasta_dados).as_posix() if p.is_file() else ""
+        if not relativo or ignorar.search(p.name) or relativo.lower().startswith("_mockup"):
+            continue
+        if relativo.lower() not in referenciados:
+            pasta = "/".join(relativo.split("/")[:1]) + ("/<id>/" + relativo.split("/")[2] if relativo.count("/") >= 3 else "")
+            rel.nao_referenciados[pasta] = rel.nao_referenciados.get(pasta, 0) + 1
+            plano.copias.append((p, relativo))
+            rel.bytes_copiados += p.stat().st_size
+
+    # --- recursos: desenhos, instruções, imagens dos relatórios, modelos de documento e todos os databooks
+    def copiar_pasta(origem: Path | None, destino: str, padrao: str = "*") -> int:
+        if not origem or not origem.is_dir():
+            return 0
+        n = 0
+        for p in sorted(origem.rglob(padrao)):
+            if p.is_file():
+                plano.copias.append((p, f"{destino}/{p.relative_to(origem).as_posix()}"))
+                rel.bytes_copiados += p.stat().st_size
+                n += 1
+        return n
+
+    rel.contar("recursos: desenhos", copiar_pasta(_achar(raiz, "Desenhos_Chavetas"), "recursos/desenhos", "*.pdf"))
+    rel.contar("recursos: instruções", copiar_pasta(_achar(raiz, "Instruções_Qualidade"), "recursos/instrucoes", "*.pdf"))
+    rel.contar("recursos: imagens", copiar_pasta(_achar(raiz, "relatorios_assets"), "recursos/relatorios"))
+    modelos = [p for p in raiz.glob("*.docx") if not p.name.startswith("~$")] if raiz.is_dir() else []
+    for p in modelos:
+        plano.copias.append((p, f"recursos/modelos/{p.name}"))
+        rel.bytes_copiados += p.stat().st_size
+    rel.contar("recursos: modelos", len(modelos))
+    ja_copiados = {destino for _, destino in plano.copias}
+    pasta_db = _achar(raiz, pasta_databook)
+    n_db = 0
+    for p in sorted(pasta_db.rglob("*")) if pasta_db and pasta_db.is_dir() else []:
+        destino = f"databooks/{p.relative_to(pasta_db).as_posix()}"
+        if p.is_file() and destino not in ja_copiados:
+            plano.copias.append((p, destino))
+            rel.bytes_copiados += p.stat().st_size
+            n_db += 1
+    rel.contar("recursos: databooks", n_db)
+
+    # --- parâmetros (nome da empresa, endereço, cliente...) de um arquivo LOCAL, fora do Git
+    arquivo_parametros = _achar(raiz, "parametros_acokey.json")
+    if arquivo_parametros:
+        try:
+            valores = json.loads(arquivo_parametros.read_text(encoding="utf-8"))
+        except ValueError:
+            rel.bloqueios.append(f"{arquivo_parametros.name}: JSON inválido")
+            valores = {}
+        plano.grupos.append([Parametro(chave=str(k)[:60], valor=str(v), alterado_por="(carga)") for k, v in valores.items()])
+        rel.contar("parametros", len(valores))
+    else:
+        rel.avisos.append("parametros_acokey.json não encontrado: preencha os Parâmetros (empresa, cliente...) pela tela")
     rel.arquivos_copiados = len(plano.copias)
     return plano
 

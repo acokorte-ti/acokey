@@ -1,0 +1,234 @@
+/* Não conformidades (lista, detalhe e correção de dureza). Classes com prefixo nc-. */
+
+.nc-contagem {
+  display: inline-block;
+  min-width: 22px;
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--neutro-fundo);
+  color: var(--tinta-2);
+  font-family: var(--fonte-mono);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.aba-atual .nc-contagem {
+  background: var(--destaque);
+  color: #ffffff;
+}
+
+.nc-filtros {
+  margin-bottom: 14px;
+}
+
+/* ---------------------------------------------------------------- lista */
+
+.nc-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nc-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--borda);
+  border-left: 4px solid var(--borda-forte);
+  border-radius: var(--raio);
+  background: var(--superficie);
+}
+
+.nc-item-aberta {
+  border-left-color: var(--erro);
+}
+
+.nc-item-em_tratamento {
+  border-left-color: var(--alerta-borda);
+}
+
+.nc-item-encerrada {
+  border-left-color: var(--ok);
+}
+
+.nc-item-corpo {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.nc-item-corpo > * + * {
+  margin-top: 4px;
+}
+
+.nc-item-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.nc-numero {
+  color: var(--destaque-forte);
+  font-weight: 600;
+}
+
+.nc-item-onde {
+  color: var(--tinta-2);
+}
+
+.nc-item-descricao {
+  color: var(--tinta-2);
+  font-size: 13.5px;
+}
+
+.nc-item-meta {
+  color: var(--tinta-3);
+  font-size: 12.5px;
+}
+
+/* ---------------------------------------------------------------- detalhe */
+
+.nc-texto {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.nc-registro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--tinta-2);
+  font-size: 13.5px;
+}
+
+.nc-opcoes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.nc-disp {
+  padding: 12px 14px;
+  border: 2px solid var(--borda);
+  border-radius: var(--raio-painel);
+  background: var(--superficie);
+}
+
+.nc-disp-sel {
+  border-color: var(--foco);
+  background: #f2f7fd;
+}
+
+.nc-disp-bloqueada .nc-disp-rotulo {
+  color: var(--tinta-3);
+  cursor: not-allowed;
+}
+
+.nc-disp-rotulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.nc-disp-rotulo input {
+  width: 18px;
+  height: 18px;
+}
+
+.nc-disp-texto {
+  margin-top: 8px;
+  padding-left: 28px;
+  color: var(--tinta-2);
+  font-size: 13.5px;
+}
+
+.nc-disp-texto > * + * {
+  margin-top: 8px;
+}
+
+.nc-campo-qtd {
+  width: 160px;
+}
+
+.nc-situacao {
+  border-left-width: 4px;
+}
+
+.nc-situacao-tratamento {
+  border-left-color: var(--alerta-borda);
+  background: var(--alerta-fundo);
+}
+
+.nc-situacao-encerrada {
+  border-left-color: var(--ok);
+  background: var(--ok-fundo);
+}
+
+/* ---------------------------------------------------------------- correção de dureza */
+
+.nc-lista-regras {
+  margin: 6px 0 6px 20px;
+}
+
+.nc-leituras td {
+  padding: 4px 6px;
+}
+
+.nc-leituras input {
+  min-height: 36px;
+  padding: 4px 6px;
+}
+
+.nc-cp {
+  min-width: 150px;
+}
+
+.nc-leitura {
+  width: 72px;
+  text-align: center;
+  font-family: var(--fonte-mono);
+}
+
+/* Pintura ao vivo conforme a especificação (como no sistema antigo): verde dentro, vermelho fora */
+.nc-leitura-ok {
+  border-color: var(--ok) !important;
+  background: var(--ok-fundo) !important;
+  color: var(--ok);
+}
+
+.nc-leitura-fora,
+.nc-leitura-invalido {
+  border-color: var(--erro) !important;
+  background: var(--erro-fundo) !important;
+  color: var(--erro);
+  font-weight: 600;
+}
+
+.nc-previa {
+  padding: 8px 12px;
+  border-radius: var(--raio);
+  font-size: 13.5px;
+}
+
+.nc-previa-ok {
+  background: var(--ok-fundo);
+  color: var(--ok);
+}
+
+.nc-previa-fora {
+  background: var(--erro-fundo);
+  color: var(--erro);
+}

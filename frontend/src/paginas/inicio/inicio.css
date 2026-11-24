@@ -1,0 +1,122 @@
+/* Início: cartões por módulo e o convite da visita guiada. Prefixo inicio-. */
+
+.inicio-cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 14px;
+}
+
+.inicio-cartao {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 132px;
+  padding: 16px 18px;
+  border: 1px solid var(--borda);
+  border-top: 3px solid var(--inicio-cor, var(--tinta-3));
+  border-radius: var(--raio-painel);
+  background: var(--superficie);
+  color: var(--tinta-2);
+  text-decoration: none;
+}
+
+.inicio-cartao:hover {
+  border-color: var(--tinta);
+  border-top-color: var(--inicio-cor, var(--tinta-3));
+  color: var(--tinta-2);
+}
+
+.inicio-icone {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 4px;
+  border-radius: 10px;
+  background: var(--superficie-2);
+  color: var(--inicio-cor, var(--tinta-3));
+}
+
+.inicio-icone .ic {
+  width: 22px;
+  height: 22px;
+}
+
+.inicio-nome {
+  color: var(--tinta);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.inicio-texto {
+  color: var(--tinta-3);
+  font-size: 13.5px;
+}
+
+.inicio-cartao-alerta {
+  border-color: var(--alerta-borda);
+}
+
+.inicio-cartao-alerta .inicio-icone {
+  background: var(--alerta-fundo);
+  color: var(--alerta);
+}
+
+.inicio-flag {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.inicio-producao {
+  --inicio-cor: #5a7fa5;
+}
+
+.inicio-qualidade {
+  --inicio-cor: var(--ok);
+}
+
+.inicio-tt {
+  --inicio-cor: #b35f00;
+}
+
+.inicio-equipamentos {
+  --inicio-cor: #6a48ad;
+}
+
+.inicio-cadastros {
+  --inicio-cor: #455a64;
+}
+
+.inicio-convite {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 14px 18px;
+  border: 1px solid var(--info);
+  border-radius: var(--raio-painel);
+  background: var(--info-fundo);
+}
+
+.inicio-convite p {
+  margin-top: 2px;
+  color: var(--tinta-2);
+  font-size: 13.5px;
+}
+
+.inicio-convite-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inicio-dica {
+  padding: 12px 16px;
+  border-radius: var(--raio-painel);
+  background: var(--superficie-2);
+  color: var(--tinta-3);
+  font-size: 13px;
+}

@@ -2,24 +2,57 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { api, definirCsrf, registrarTratadores } from './api';
 import type { Modulo, RespostaSessao, Usuario } from './tipos';
 
-/** O que o usuário pode abrir (o backend recusa de qualquer forma; aqui é só para esconder). */
+/**
+ * O que o usuário pode abrir (o backend recusa de qualquer forma; aqui é só para esconder).
+ * As combinações seguem o menu do sistema antigo (legado/templates_html.py, TEMPLATES["base"]).
+ * O administrador enxerga todos os módulos (igual ao backend), mas NÃO ganha "pode aprovar".
+ */
 export interface Permissoes {
-  /** Tela de usuários: só o administrador. */
+  /** Usuários e parâmetros do sistema. */
   admin: boolean;
-  /** Tela de auditoria: administrador ou quem tem o módulo Qualidade. */
+  /** Pode assinar relatórios como "Aprovado por" e decidir desvios (uso como está, anulação). */
+  aprovador: boolean;
+  qualidade: boolean;
+  pcp: boolean;
+  producaoTT: boolean;
+  producaoUsinagem: boolean;
+  cadastros: boolean;
+  /** Auditoria: Qualidade. */
   auditoria: boolean;
+  /** Cargas de TT e relatório de tratamento térmico: Produção TT ou Qualidade. */
+  tt: boolean;
+  /** Envios a prestador e Ordem de Faturamento: Qualidade, Produção TT ou Produção Usinagem. */
+  expedicao: boolean;
+  /** KPIs: Qualidade ou Produção TT. */
+  kpis: boolean;
+  /** Equipamentos: Qualidade ou Cadastros. */
+  equipamentos: boolean;
 }
 
-/** O usuário tem este módulo liberado? (o administrador não ganha os módulos automaticamente) */
+/** O usuário tem este módulo liberado? O administrador tem todos. */
 export function temModulo(usuario: Usuario | null, modulo: Modulo): boolean {
-  return usuario !== null && usuario.modulos.includes(modulo);
+  return usuario !== null && (usuario.admin || usuario.modulos.includes(modulo));
 }
 
 export function permissoesDe(usuario: Usuario | null): Permissoes {
-  const admin = usuario?.admin === true;
+  const m = (modulo: Modulo) => temModulo(usuario, modulo);
+  const qualidade = m('qualidade');
+  const producaoTT = m('producao_tt');
+  const producaoUsinagem = m('producao_usinagem');
+  const cadastros = m('cadastros');
   return {
-    admin,
-    auditoria: admin || temModulo(usuario, 'qualidade'),
+    admin: usuario?.admin === true,
+    aprovador: usuario?.pode_aprovar === true,
+    qualidade,
+    pcp: m('pcp'),
+    producaoTT,
+    producaoUsinagem,
+    cadastros,
+    auditoria: qualidade,
+    tt: qualidade || producaoTT,
+    expedicao: qualidade || producaoTT || producaoUsinagem,
+    kpis: qualidade || producaoTT,
+    equipamentos: qualidade || cadastros,
   };
 }
 

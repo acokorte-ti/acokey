@@ -1,0 +1,62 @@
+/* Ordem de faturamento. Prefixo: fat- (o resto vem de ../envios/envios.css, prefixo env-) */
+
+.fat-lote-pronto {
+  background: var(--ok-fundo);
+}
+
+.fat-lote-bloqueado {
+  background: var(--erro-fundo);
+  color: #7d1a14;
+  cursor: default;
+}
+
+.fat-lote-bloqueado:hover {
+  border-color: transparent;
+}
+
+.fat-lote-bloqueado.env-lote-marcado {
+  border-color: var(--erro);
+}
+
+.fat-lote-op {
+  font-weight: 700;
+  color: var(--alerta);
+}
+
+.fat-motivos {
+  color: var(--erro);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fat-outra {
+  color: var(--info);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fat-piv-ok {
+  color: var(--ok);
+  font-size: 12.5px;
+}
+
+.fat-numero {
+  width: 150px !important;
+  min-height: 36px !important;
+  padding: 4px 8px !important;
+  font-family: var(--fonte-mono);
+  text-align: center;
+}
+
+.fat-numero-corrigido {
+  border-color: var(--alerta-borda) !important;
+  background: var(--alerta-fundo) !important;
+}
+
+.fat-aviso-numero {
+  display: block;
+  margin-top: 2px;
+  color: var(--alerta);
+  font-size: 11.5px;
+  white-space: nowrap;
+}

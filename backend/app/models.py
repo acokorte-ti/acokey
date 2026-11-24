@@ -245,6 +245,10 @@ class MateriaPrima(Base):
     aprovado_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
     aprovado_em: Mapped[datetime | None] = mapped_column(DateTime)
     obs_aprovacao: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # Nada é apagado: a corrida lançada por engano é cancelada (some das listas, fica no banco)
+    cancelado_em: Mapped[datetime | None] = mapped_column(DateTime)
+    cancelado_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    cancelado_motivo: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 class MateriaPrimaAnexo(Base):
@@ -255,6 +259,9 @@ class MateriaPrimaAnexo(Base):
     nome: Mapped[str] = mapped_column(String(255))
     arquivo: Mapped[str] = mapped_column(String(400))  # caminho dentro da pasta de arquivos
     quando: Mapped[datetime | None] = mapped_column(DateTime)
+    removido_em: Mapped[datetime | None] = mapped_column(DateTime)
+    removido_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    removido_motivo: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 # ---------------------------------------------------------------- lotes e o fluxo de etapas
@@ -277,6 +284,10 @@ class Lote(Base):
     etapa: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     etapa_desde: Mapped[datetime | None] = mapped_column(DateTime)
     criado_em: Mapped[datetime | None] = mapped_column(DateTime)
+    # Nada é apagado: lote criado por engano é cancelado (sai do painel, continua no banco e na auditoria)
+    cancelado_em: Mapped[datetime | None] = mapped_column(DateTime)
+    cancelado_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    cancelado_motivo: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 class Registro(Base):
@@ -321,6 +332,10 @@ class Anexo(Base):
     quando: Mapped[datetime | None] = mapped_column(DateTime)
     # Evidência só interna (ex.: fotos): não entra no databook do cliente
     apenas_registro: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # Nada é apagado: anexo removido some da etapa e do databook, mas o arquivo e o registro ficam
+    removido_em: Mapped[datetime | None] = mapped_column(DateTime)
+    removido_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    removido_motivo: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 class Evento(Base):
@@ -385,6 +400,10 @@ class CargaTT(Base):
     criado_em: Mapped[datetime | None] = mapped_column(DateTime)
     criado_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
     relatorio_anexo_id: Mapped[int | None] = mapped_column(ForeignKey("anexos.id", ondelete="SET NULL"))
+    # Nada é apagado: a carga montada por engano é cancelada (o antigo tinha "excluir")
+    cancelado_em: Mapped[datetime | None] = mapped_column(DateTime)
+    cancelado_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    cancelado_motivo: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 class CargaTTLote(Base):
@@ -423,6 +442,10 @@ class EnvioPrestador(Base):
     qtd_cp_impacto: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     criado_em: Mapped[datetime | None] = mapped_column(DateTime)
     criado_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    # Nada é apagado: o "excluir" do sistema antigo vira cancelamento com motivo (status "cancelado")
+    cancelado_em: Mapped[datetime | None] = mapped_column(DateTime)
+    cancelado_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    cancelado_motivo: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 class EnvioPrestadorLote(Base):
@@ -449,6 +472,9 @@ class EnvioPrestadorFoto(Base):
     arquivo: Mapped[str] = mapped_column(String(400))  # caminho dentro da pasta de arquivos
     quando: Mapped[datetime | None] = mapped_column(DateTime)
     legenda: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    removido_em: Mapped[datetime | None] = mapped_column(DateTime)
+    removido_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    removido_motivo: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 # ---------------------------------------------------------------- ordem de faturamento (saída física)
@@ -470,6 +496,10 @@ class OrdemFaturamento(Base):
     status: Mapped[str] = mapped_column(String(12), default="rascunho", server_default="rascunho", index=True)
     criado_em: Mapped[datetime | None] = mapped_column(DateTime)
     criado_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    # Nada é apagado: o "excluir" do sistema antigo vira cancelamento com motivo (status "cancelada")
+    cancelado_em: Mapped[datetime | None] = mapped_column(DateTime)
+    cancelado_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    cancelado_motivo: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 class OrdemFaturamentoLote(Base):
@@ -506,3 +536,38 @@ class DatabookEnviado(Base):
     observacoes: Mapped[str] = mapped_column(Text, default="", server_default="")
     enviado_em: Mapped[datetime | None] = mapped_column(DateTime)
     enviado_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    # Nada é apagado: "desfazer envio" só marca a linha (o PDF continua em databooks/Enviados/)
+    desfeito_em: Mapped[datetime | None] = mapped_column(DateTime)
+    desfeito_por: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    desfeito_motivo: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+
+# ---------------------------------------------------------------- parâmetros e numeração
+
+
+class Parametro(Base):
+    """Valores configuráveis pela tela (nome da empresa, endereço, cliente, código da especificação...).
+
+    Ficam no banco, e não no código, porque o repositório é público: nada que identifique o cliente
+    final pode estar versionado. A carga traz os valores do sistema antigo.
+    """
+
+    __tablename__ = "parametros"
+
+    chave: Mapped[str] = mapped_column(String(60), primary_key=True)
+    valor: Mapped[str] = mapped_column(Text, default="", server_default="")
+    alterado_em: Mapped[datetime | None] = mapped_column(DataHoraFuso)
+    alterado_por: Mapped[str] = mapped_column(String(60), default="", server_default="")
+
+
+class Sequencia(Base):
+    """Último número usado por prefixo e ano (NC-2026-001, TT-2026-001, EP-..., OF-...).
+
+    A linha é travada na transação que gera o número: duas pessoas ao mesmo tempo nunca recebem o mesmo.
+    """
+
+    __tablename__ = "sequencias"
+
+    prefixo: Mapped[str] = mapped_column(String(10), primary_key=True)
+    ano: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ultimo: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
