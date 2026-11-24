@@ -32,8 +32,16 @@ GRANT CREATE SESSION TO acokey_ro;
 GRANT SELECT ANY TABLE      TO acokey_ro;
 GRANT SELECT ANY DICTIONARY TO acokey_ro;
 
--- C) Tabelas que as consultas usam: PREENCHER depois do mapeamento (ver backend/app/mega.py).
---    Exemplo do formato:
+-- C) Tabelas que as consultas usam.
+--    Já mapeadas e validadas em outros sistemas (EstoqueACK e Indicadores de Manutenção):
+GRANT SELECT ON ACOKORTE.PRO_ORDENS      TO acokey_ro;  -- OP: item, quantidade, situação, pedido alternativo
+GRANT SELECT ON ACOKORTE.PRO_ORIGEM      TO acokey_ro;  -- origem da OP (pedido de venda)
+GRANT SELECT ON ACOKORTE.VEN_PEDIDOVENDA TO acokey_ro;  -- pedido de venda (PIV) e cliente
+GRANT SELECT ON ACOKORTE.GLO_AGENTES     TO acokey_ro;  -- nome do cliente e do fornecedor
+GRANT SELECT ON ACOKORTE.EST_PRODUTOS    TO acokey_ro;  -- descrição do item (CODITEM)
+GRANT SELECT ON ACOKORTE.EST_RECEBIMENTO TO acokey_ro;  -- nota fiscal de entrada (matéria-prima)
+GRANT SELECT ON ACOKORTE.EST_ITENSRECEB  TO acokey_ro;  -- itens da nota de entrada
+--    Ainda a mapear (bloco B ativo): NF de saída / data e quantidade faturada, PO e projeto do pedido.
 -- GRANT SELECT ON ACOKORTE.<TABELA> TO acokey_ro;  -- <para que serve>
 
 -- D) Encerrar o mapeamento: tira a leitura ampla do bloco B. Rodar logo depois do bloco C.
