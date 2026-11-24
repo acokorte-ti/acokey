@@ -41,8 +41,11 @@ GRANT SELECT ON ACOKORTE.GLO_AGENTES     TO acokey_ro;  -- nome do cliente e do 
 GRANT SELECT ON ACOKORTE.EST_PRODUTOS    TO acokey_ro;  -- descrição do item (CODITEM)
 GRANT SELECT ON ACOKORTE.EST_RECEBIMENTO TO acokey_ro;  -- nota fiscal de entrada (matéria-prima)
 GRANT SELECT ON ACOKORTE.EST_ITENSRECEB  TO acokey_ro;  -- itens da nota de entrada
---    Ainda a mapear (bloco B ativo): NF de saída / data e quantidade faturada, PO e projeto do pedido.
--- GRANT SELECT ON ACOKORTE.<TABELA> TO acokey_ro;  -- <para que serve>
+--    Mapeadas em 24/11/2026 para o AçoKey Q (ver docs/integracao_mega.md):
+GRANT SELECT ON ACOKORTE.VEN_ITEMPEDIDOVENDA      TO acokey_ro;  -- item do pedido: PO do cliente, qtd faturada
+GRANT SELECT ON ACOKORTE.VEN_ITEMPEDI_VEN_ITEMNOT TO acokey_ro;  -- vínculo item do pedido x item da nota
+GRANT SELECT ON ACOKORTE.VEN_ITEMNOTAFISCAL       TO acokey_ro;  -- item da nota fiscal de saída
+GRANT SELECT ON ACOKORTE.VEN_NOTAFISCAL           TO acokey_ro;  -- nota fiscal de saída: número, data, situação
 
 -- D) Encerrar o mapeamento: tira a leitura ampla do bloco B. Rodar logo depois do bloco C.
 -- REVOKE SELECT ANY TABLE      FROM acokey_ro;
