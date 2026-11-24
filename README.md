@@ -165,14 +165,9 @@ Administradores: o da TI entra pelo `.env` (`ADMIN_LOGIN`, `ADMIN_NOME`, `ADMIN_
 primeira subida); o da Qualidade entra pela carga, com `--admin` (seção "Carga do sistema antigo"). Os dois
 trocam a senha no primeiro acesso.
 
-HTTPS (uma vez, com sudo; o DNS já precisa apontar para o servidor):
-
-```bash
-sudo certbot certonly --webroot -w /var/www/certbot -d acokey.acokorte.com.br
-sudo cp deploy/nginx-host/acokey.acokorte.com.br.conf /etc/nginx/sites-available/acokey
-sudo ln -s /etc/nginx/sites-available/acokey /etc/nginx/sites-enabled/acokey
-sudo nginx -t && sudo systemctl reload nginx
-```
+HTTPS (uma vez; o DNS `acokey.acokorte.com.br` já precisa apontar para o servidor, o mesmo IP de
+`manutencao.acokorte.com.br`): `deploy/ativar_https.sh` emite o certificado, liga o site no nginx do servidor,
+testa a configuração e recarrega (se o teste falhar, desliga o site de novo).
 
 Backup (crontab do usuário `ubuntu`):
 
