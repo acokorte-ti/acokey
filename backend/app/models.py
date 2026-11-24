@@ -160,10 +160,17 @@ class Equipamento(Base):
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
 
 
+ORIGENS_OP = ("manual", "planilha", "mega")
+
+
 class OrdemProducao(Base):
-    """Cadastro mestre de OPs (antiga planilha Cadastro_Lote_<cliente>.xlsx, aba Dados)."""
+    """Cadastro mestre de OPs (antiga planilha Cadastro_Lote_<cliente>.xlsx, aba Dados).
+
+    Com a integração ligada, a busca no Mega (app/mega.py) atualiza o que vem do ERP e inclui as OPs novas.
+    """
 
     __tablename__ = "ordens_producao"
+    __table_args__ = (CheckConstraint(_em(ORIGENS_OP, "origem"), name="ck_ordens_producao_origem"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     op: Mapped[str] = mapped_column(String(20), unique=True)
@@ -178,6 +185,14 @@ class OrdemProducao(Base):
     qt_faturada: Mapped[int | None] = mapped_column(Integer)
     projeto: Mapped[str] = mapped_column(String(120), default="", server_default="")
     po: Mapped[str] = mapped_column(String(60), default="", server_default="")  # pedido do cliente
+    # Como a OP entrou no cadastro: digitada na tela, pela planilha (ou carga do sistema antigo) ou pelo Mega
+    origem: Mapped[str] = mapped_column(String(10), default="manual", server_default="manual")
+    situacao_op: Mapped[str | None] = mapped_column(String(4))  # situação da OP no Mega (AB aberta, EN encerrada...)
+    sincronizado_em: Mapped[datetime | None] = mapped_column(DataHoraFuso)  # última vez que veio do Mega
+    # Retrato do Mega na última busca, só como referência (nada aqui é digitado): item, descrição, cliente, quantidade
+    # da OP, pedido de origem, PO e as notas de saída do item no pedido [{"nf", "data", "qtd"}], com o pedido de onde
+    # vieram (o PIV digitado ou, sem ele, o de origem) e quantas OPs dividem esse pedido e item. Ver app/mega.py.
+    dados_mega: Mapped[dict | None] = mapped_column(Json)
 
 
 # ---------------------------------------------------------------- especificações (nunca inventar valores)

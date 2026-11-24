@@ -44,6 +44,13 @@ class ErroPlanilha(Exception):
     """Mensagem pronta para o usuário."""
 
 
+def classificar(descricao: str | None) -> str | None:
+    """Tipo da chaveta pela descrição do item. Regra do sistema antigo (legado/app.py, `classificar`): procura PIN,
+    depois BOX, depois ARK, nessa ordem. A ordem importa: há descrições de PIN e BOX que também contêm "ARK"."""
+    texto = (descricao or "").upper()
+    return next((tipo for tipo in TIPOS_LOTE if tipo in texto), None)
+
+
 @dataclass
 class LinhaOP:
     op: str
@@ -211,7 +218,8 @@ def comparar(db: Session, linhas: dict[str, LinhaOP]) -> dict:
 def incluir_novas(db: Session, linhas: dict[str, LinhaOP], confirmadas: set[str]) -> list[OrdemProducao]:
     """Grava (flush, sem commit) só as OPs que ainda não existem E que o usuário confirmou."""
     existentes = set(db.scalars(select(OrdemProducao.op)))
-    novas = [OrdemProducao(**linhas[op].valores()) for op in sorted(confirmadas) if op in linhas and op not in existentes]
+    novas = [OrdemProducao(**linhas[op].valores(), origem="planilha")
+             for op in sorted(confirmadas) if op in linhas and op not in existentes]  # fmt: skip
     db.add_all(novas)
     db.flush()
     return novas

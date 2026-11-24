@@ -204,6 +204,29 @@ def test_carga_so_roda_com_banco_vazio(db, legado):
         carga.executar(db, legado, aplicar=True)
 
 
+def test_ops_trazidas_pelo_mega_nao_bloqueiam_e_recebem_os_dados_da_planilha(db, legado):
+    dados = {"pedido_origem": "9001", "notas": [{"nf": "800001", "data": "2026-09-01", "qtd": 72}]}
+    db.add(OrdemProducao(op="900001", origem="mega", cliente="CLIENTE EXEMPLO", piv="9001", po="", qt_lote=80,
+                         situacao_op="EN", dados_mega=dados))  # fmt: skip
+    db.add(OrdemProducao(op="900077", origem="mega"))  # não está na planilha: fica como veio
+    db.commit()
+    rel = carga.executar(db, legado, aplicar=True, copiar_arquivos=False)
+    assert any("já tinham vindo do Mega" in a for a in rel.avisos)
+    ops = {o.op: o for o in db.scalars(select(OrdemProducao))}
+    assert set(ops) == {"900001", "900077"}
+    op = ops["900001"]
+    assert op.origem == "planilha" and op.piv == "PIV-9" and op.po == "PO-1" and op.qt_lote == 72  # a planilha prevalece
+    assert op.situacao_op == "EN" and op.dados_mega == dados  # o que só o Mega tem continua
+    assert ops["900077"].origem == "mega"
+
+
+def test_op_digitada_bloqueia_a_carga(db, legado):
+    db.add(OrdemProducao(op="900099", origem="manual"))
+    db.commit()
+    with pytest.raises(carga.ErroCarga, match="OPs digitadas"):
+        carga.executar(db, legado, aplicar=False)
+
+
 def test_especificacao_que_nao_e_numero_bloqueia(db, legado):
     con = sqlite3.connect(legado / "data" / "sistema.db")
     con.execute("update spec_tipo set dureza_max='39 a 40' where tipo='PIN'")

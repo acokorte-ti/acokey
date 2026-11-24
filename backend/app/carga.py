@@ -350,6 +350,7 @@ def montar(
             tipo=tipo if tipo in TIPOS_LOTE else None, data_faturamento=so_data(_col(linha, 5), f"OP {op}", rel),
             nf=_texto(_col(linha, 6)), piv=_texto(_col(linha, 7)), qt_lote=_inteiro_ou_nada(_col(linha, 8)),
             qt_faturada=_inteiro_ou_nada(_col(linha, 9)), projeto=_texto(_col(linha, 10)), po=_texto(_col(linha, 11)),
+            origem="planilha",
         )  # fmt: skip
     plano.grupos.append([*fornecedores.values(), *prestadores.values(), *equipamentos.values(), *ops.values()])
     rel.contar("fornecedores_mp", len(fornecedores))
@@ -760,7 +761,36 @@ def montar(
 
 
 def _banco_vazio(db: Session) -> bool:
-    return not any(db.scalar(select(func.count()).select_from(m)) for m in (Lote, MateriaPrima, OrdemProducao))
+    """Sem lotes, matéria-prima nem OPs digitadas. OPs trazidas pelo Mega não contam: a busca pode rodar antes da
+    carga, e a planilha completa essas OPs (ver `_juntar_ops_do_mega`)."""
+    if any(db.scalar(select(func.count()).select_from(m)) for m in (Lote, MateriaPrima)):
+        return False
+    return not db.scalar(select(func.count()).select_from(OrdemProducao).where(OrdemProducao.origem != "mega"))
+
+
+_CAMPOS_PLANILHA_OP = ("cliente", "coditem", "descricao", "tipo", "data_faturamento", "nf", "piv", "qt_lote",
+                       "qt_faturada", "projeto", "po")  # fmt: skip
+
+
+def _juntar_ops_do_mega(db: Session, plano: Plano, rel: Relatorio) -> None:
+    """OP da planilha que o Mega já trouxe: o que a Qualidade digitou na planilha vai para a OP existente
+    (campo preenchido na planilha prevalece) e ela deixa de ser inserida de novo."""
+    do_mega = {o.op: o for o in db.scalars(select(OrdemProducao).where(OrdemProducao.origem == "mega"))}
+    if not do_mega:
+        return
+    juntadas = 0
+    for grupo in plano.grupos:
+        for objeto in [o for o in grupo if isinstance(o, OrdemProducao) and o.op in do_mega]:
+            existente = do_mega[objeto.op]
+            for campo in _CAMPOS_PLANILHA_OP:
+                valor = getattr(objeto, campo)
+                if valor not in (None, ""):
+                    setattr(existente, campo, valor)
+            existente.origem = "planilha"
+            grupo.remove(objeto)
+            juntadas += 1
+    if juntadas:
+        rel.avisos.append(f"{juntadas} OP(s) da planilha já tinham vindo do Mega: os dados da planilha foram juntados a elas")
 
 
 def _acertar_sequencias(db: Session) -> None:
@@ -785,13 +815,14 @@ def executar(
 ) -> Relatorio:
     rel = Relatorio()
     if not _banco_vazio(db):
-        raise ErroCarga("O banco novo já tem lotes, matéria-prima ou OPs: a carga inicial só roda com ele vazio.")
+        raise ErroCarga("O banco novo já tem lotes, matéria-prima ou OPs digitadas: a carga inicial só roda com ele vazio.")
     plano = montar(db, raiz, pasta_dados, rel, renomear, admins)
     if not aplicar:
         return rel
     if rel.bloqueios:
         raise ErroCarga("Há bloqueios no relatório: nada foi gravado.\n" + rel.texto(aplicado=False))
 
+    _juntar_ops_do_mega(db, plano, rel)
     for grupo in plano.grupos:
         db.add_all(grupo)
         db.flush()

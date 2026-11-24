@@ -18,7 +18,7 @@ nomes do cliente e de funcionários). Ver `.gitignore` e o aviso no topo do `CLA
 | 3. Qualidade | Não conformidades (4 disposições, correção de dureza), especificações, verificação dimensional RIP-33A | **pronta** |
 | 4. Relatórios e databook | Dureza RIP-35, Tratamento Térmico (por carga), Visual, databook (capa, índice, anexos), conferência, controle "Enviado-DB" | **pronta** |
 | 5. Demais módulos | Matéria-prima (carimbo e propagação), cadastros, ordens de produção (importação da planilha), parâmetros, assinaturas, cargas de TT, envios a prestador (PDF e modelo do laboratório), ordem de faturamento, início, painel com alertas, dashboard, Gantt, KPIs, indicadores, busca (Ctrl+K), exportações Excel | **pronta** |
-| 6. Mega | Leitura das OPs, faturamento e notas de entrada do ERP | infraestrutura pronta, desligada; falta mapear as tabelas |
+| 6. Mega | Busca das OPs (com pedido, PO e notas de saída) no ERP; falta a NF de entrada da matéria-prima | OPs **prontas**, a ligar na produção |
 | 7. Visita guiada e manual | Tutorial por tela (o antigo tinha 25) e manual do usuário | a fazer |
 | 8. Virada | Homologação no system-lab, carga final dos dados reais, desligamento do notebook | a fazer |
 
@@ -169,10 +169,11 @@ HTTPS (uma vez; o DNS `acokey.acokorte.com.br` já precisa apontar para o servid
 `manutencao.acokorte.com.br`): `deploy/ativar_https.sh` emite o certificado, liga o site no nginx do servidor,
 testa a configuração e recarrega (se o teste falhar, desliga o site de novo).
 
-Backup (crontab do usuário `ubuntu`):
+Backup e busca das OPs no Mega (crontab do usuário `ubuntu`):
 
 ```
-50 2 * * *  $HOME/apps/acokey/deploy/backup/backup.sh >> $HOME/.local/state/acokey-backup.log 2>&1
+50 2 * * *    $HOME/apps/acokey/deploy/backup/backup.sh >> $HOME/.local/state/acokey-backup.log 2>&1
+15 6-18 * * 1-6  cd $HOME/apps/acokey && docker compose exec -T api python -m app.mega sincronizar </dev/null >> $HOME/.local/state/acokey-mega.log 2>&1
 ```
 
 `deploy/backup/backup.sh` gera, por dia, um dump do banco e um pacote dos arquivos, ambos cifrados com
@@ -201,21 +202,30 @@ O sistema novo já funciona assim; cada item pode ser revertido se a Qualidade p
    "Preencher" no modelo.
 8. **Reabrir NC e corrigir dureza** exigem "pode aprovar" (o antigo exigia só o módulo Qualidade).
 
-## Mega (ERP, somente leitura) — desligado até o mapeamento
+## Mega (ERP, somente leitura)
 
 Mesmo padrão do EstoqueACK e dos Indicadores de Manutenção: usuário de banco **próprio deste sistema**
 (`acokey_ro`), só com SELECT nas tabelas usadas, conexão em modo thick a partir do system-lab, toda sessão em
-`SET TRANSACTION READ ONLY`. O sistema copia o que lê para o PostgreSQL e nunca grava no ERP.
+`SET TRANSACTION READ ONLY`. O sistema copia o que lê para o PostgreSQL e nunca grava no ERP. Mapeamento e
+validação das tabelas: `docs/integracao_mega.md`.
 
-O que deve vir do Mega: as ordens de produção (hoje vêm da planilha de OPs: cliente, item, descrição, quantidade,
-PIV, PO, NF e faturamento), fornecedores e NF de entrada da matéria-prima e, talvez, a NF de saída da OF. Nenhuma
-tabela do Mega foi mapeada ainda.
+**Ordens de produção** (Cadastros > Ordens de produção, botão "Buscar no Mega", e o cron de hora em hora): entram
+as OPs de chaveta abertas no Mega; nas já cadastradas, o Mega só preenche campo vazio (nada digitado é trocado) e
+o que estiver diferente aparece para conferência. PIV, NF, data e quantidade faturada não são preenchidos: a OP
+mostra, como referência, as notas de saída do item no pedido (o PIV digitado ou, sem ele, o pedido de origem da OP
+no Mega). Regras completas no topo de `backend/app/mega.py`.
 
-1. O DBA roda os blocos A e B de `scripts/mega/01_criar_usuario_leitura.sql` (leitura ampla só para o mapeamento).
-2. No servidor: `deploy/configurar_mega.sh` (pede a senha sem mostrar, grava no `.env` e testa) e
-   `docker compose exec api python -m app.mega testar`.
-3. Mapeamento das tabelas; as consultas entram em `backend/app/mega.py`.
-4. O DBA roda os blocos C (SELECT só nas tabelas usadas) e D (revoga a leitura ampla); `MEGA_HABILITADO=true`.
+```bash
+docker compose exec -T api python -m app.mega testar </dev/null                   # conexão e privilégios
+docker compose exec -T api python -m app.mega sincronizar --simular </dev/null    # mostra o que mudaria, sem gravar
+docker compose exec -T api python -m app.mega sincronizar </dev/null              # grava (é o que o cron roda)
+```
+
+Ligar: `MEGA_HABILITADO=true` no `.env` do servidor e `docker compose up -d api`. Depois de conferir a primeira
+busca, o DBA roda o bloco D de `scripts/mega/01_criar_usuario_leitura.sql` (tira a leitura ampla do mapeamento) e
+o `testar` acima confirma "Somente leitura".
+
+Falta: fornecedor e NF de entrada da matéria-prima (`EST_RECEBIMENTO` / `EST_ITENSRECEB`, já liberadas no bloco C).
 
 Socorro, quando ninguém consegue entrar:
 

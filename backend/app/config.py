@@ -1,5 +1,5 @@
 """Configuração lida do ambiente (.env no servidor). Nenhum segredo fica no código."""
-from datetime import datetime
+from datetime import date, datetime
 from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -27,14 +27,16 @@ class Config(BaseSettings):
     login_bloqueio_minutos: int = 15
     senha_tamanho_minimo: int = 10
 
-    # ERP Mega (Oracle), SOMENTE LEITURA, com usuário próprio deste sistema (acokey_ro). Desligado até o
-    # mapeamento das tabelas: ver backend/app/mega.py e scripts/mega/01_criar_usuario_leitura.sql
+    # ERP Mega (Oracle), SOMENTE LEITURA, com usuário próprio deste sistema (acokey_ro). Ver backend/app/mega.py,
+    # docs/integracao_mega.md e scripts/mega/01_criar_usuario_leitura.sql
     mega_habilitado: bool = False
     mega_dsn: str = ""
     mega_usuario: str = ""
     mega_senha: str = ""
     mega_instant_client: str = "/opt/instantclient"
     mega_esquema: str = "ACOKORTE"  # dono das tabelas do ERP
+    mega_filial: int = 3  # filial de Itu no Mega
+    mega_ops_desde: date = date(2024, 1, 1)  # OPs abertas antes disso não são lidas
 
     @property
     def producao(self) -> bool:

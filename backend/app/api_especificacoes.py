@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.api_recursos import listar_desenhos
 from app.db import get_db
 from app.models import TIPOS_LOTE, EspecificacaoCota, EspecificacaoTipo
+from app.ordens_producao import classificar
 from app.seguranca import Contexto, auditar, diferencas, exigir, limpar_texto
 
 rota = APIRouter()
@@ -77,9 +78,8 @@ def _tipo_para_tela(spec: EspecificacaoTipo | None, tipo: str) -> dict:
 
 
 def _classificar(descricao: str) -> str:
-    """Tipo detectado pelo nome do desenho (mesma ordem do sistema antigo: PIN, BOX, ARK)."""
-    texto = (descricao or "").upper()
-    return next((t for t in ("PIN", "BOX", "ARK") if t in texto), "")
+    """Tipo detectado pelo nome do desenho (mesma regra das OPs: PIN, depois BOX, depois ARK)."""
+    return classificar(descricao) or ""
 
 
 def _cota_para_tela(c: EspecificacaoCota) -> dict:

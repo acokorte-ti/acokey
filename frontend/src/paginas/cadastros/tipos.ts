@@ -64,9 +64,64 @@ export interface OrdemProducao {
   po: string;
   /** Lotes (não cancelados) com esta OP. */
   lotes: number;
+  /** Como a OP entrou: digitada, pela planilha (ou carga do sistema antigo) ou pela busca no Mega. */
+  origem: 'manual' | 'planilha' | 'mega';
+  /** Situação da OP no Mega (AB aberta, EN encerrada, CA cancelada...). */
+  situacao_op: string | null;
+  /** Última vez que a OP veio do Mega (data de sistema, com fuso). */
+  sincronizado_em: string | null;
+  /** Retrato do Mega na última busca, só como referência. */
+  dados_mega: DadosMega | null;
 }
 
-export type OrdemEntrada = Omit<OrdemProducao, 'id' | 'lotes' | 'tipo'> & { tipo: string | null };
+export interface NotaFiscalMega {
+  nf: string;
+  /** AAAA-MM-DD */
+  data: string | null;
+  qtd: number;
+}
+
+export interface DadosMega {
+  coditem: string;
+  descricao: string;
+  cliente: string;
+  /** Quantidade da OP no Mega (a do lote pode ser menor). */
+  qtde: number | null;
+  /** Pedido de venda para o qual a OP foi aberta. Nem sempre é o pedido do faturamento (PIV). */
+  pedido_origem: string | null;
+  /** Pedido de onde vieram as notas: o PIV digitado ou, sem ele, o de origem. */
+  pedido_notas: string | null;
+  notas_do_piv: boolean;
+  po: string;
+  /** Notas de saída do item nesse pedido. */
+  notas: NotaFiscalMega[];
+  /** OPs do mesmo item nesse pedido. Mais de uma: não dá para saber qual nota é de cada OP. */
+  ops_mesmo_pedido: number;
+}
+
+/** Campos que só a busca no Mega preenche (não vão no formulário). */
+type CamposDoMega = 'origem' | 'situacao_op' | 'sincronizado_em' | 'dados_mega';
+
+export type OrdemEntrada = Omit<OrdemProducao, 'id' | 'lotes' | 'tipo' | CamposDoMega> & { tipo: string | null };
+
+export interface BuscaMega {
+  quando: string | null;
+  /** Login de quem buscou, ou "(agendador)". */
+  por: string;
+  erro: string | null;
+  lidas: number | null;
+  novas: number | null;
+  atualizadas: number | null;
+  /** OPs em que o cadastro tem item, descrição ou tipo diferente do Mega (não alterados). */
+  divergentes: number | null;
+  ops_divergentes: string[];
+}
+
+export interface SituacaoMega {
+  pronto: boolean;
+  motivo: string;
+  ultima: BuscaMega | null;
+}
 
 export interface OpNova {
   op: string;

@@ -7,9 +7,9 @@ import { SeloTipo } from '../../componentes/Selos';
 import { TabelaOrdenavel, type Coluna } from '../../componentes/Tabela';
 import { api, baixarArquivo, enviarArquivos, mensagemDeErro } from '../../lib/api';
 import { useAvisos } from '../../lib/avisos';
-import { contemTermos, dataCurta, inteiro, TRACO } from '../../lib/formato';
+import { contemTermos, dataCurta, dataHoraSistema, inteiro, normalizar, TRACO } from '../../lib/formato';
 import { useCarga } from '../../lib/useCarga';
-import type { Comparacao, OrdemEntrada, OrdemProducao } from './tipos';
+import type { BuscaMega, Comparacao, OrdemEntrada, OrdemProducao, SituacaoMega } from './tipos';
 
 type FormOrdem = Record<keyof OrdemEntrada, string>;
 
@@ -49,6 +49,115 @@ function paraEnvio(f: FormOrdem): OrdemEntrada {
     data_faturamento: f.data_faturamento || null, nf: f.nf.trim(), piv: f.piv.trim(), qt_lote: numeroOuNada(f.qt_lote),
     qt_faturada: numeroOuNada(f.qt_faturada), projeto: f.projeto.trim(), po: f.po.trim(),
   };
+}
+
+// ---------------------------------------------------------------- dados que vêm do Mega
+
+const SITUACOES_OP: Record<string, string> = { AB: 'Aberta', EN: 'Encerrada', CA: 'Cancelada' };
+
+function situacaoOp(codigo: string | null): string {
+  if (!codigo) return TRACO;
+  return SITUACOES_OP[codigo] ?? codigo;
+}
+
+function resumoBusca(b: BuscaMega): string {
+  const quem = b.por === '(agendador)' ? 'automática' : `por ${b.por}`;
+  const quando = `${dataHoraSistema(b.quando)}, ${quem}`;
+  if (b.erro) return quando;
+  return `${quando}: ${inteiro(b.novas)} OP(s) nova(s), ${inteiro(b.atualizadas)} atualizada(s).`;
+}
+
+function mesmoTexto(a: string, b: string): boolean {
+  return normalizar(a).replace(/\s+/g, ' ') === normalizar(b).replace(/\s+/g, ' ');
+}
+
+/** O que o Mega tem para esta OP, só como referência: a busca nunca troca o que foi digitado. */
+function DadosDoMega({ ordem }: { ordem: OrdemProducao }) {
+  const m = ordem.dados_mega;
+  if (!m) return null;
+  const itemDiferente = !!m.coditem && !!ordem.coditem && m.coditem.trim() !== ordem.coditem.trim();
+  const descricaoDiferente = !!m.descricao && !!ordem.descricao && !mesmoTexto(m.descricao, ordem.descricao);
+  return (
+    <section className="cad-mega" aria-labelledby="op-titulo-mega">
+      <h3 id="op-titulo-mega">Dados do Mega</h3>
+      <p className="dica">
+        Como estava no Mega na última busca ({dataHoraSistema(ordem.sincronizado_em)}). A busca só preenche campo vazio: o que foi
+        digitado acima nunca é trocado. PIV, NF, data e quantidade faturada não são preenchidos por ela.
+      </p>
+      <dl className="cad-mega-dados">
+        <div>
+          <dt>Situação da OP</dt>
+          <dd className={ordem.situacao_op === 'CA' ? 'texto-erro' : undefined}>{situacaoOp(ordem.situacao_op)}</dd>
+        </div>
+        <div>
+          <dt>Quantidade da OP</dt>
+          <dd>{inteiro(m.qtde)}</dd>
+        </div>
+        <div>
+          <dt>Pedido de origem</dt>
+          <dd className="mono">{m.pedido_origem || TRACO}</dd>
+        </div>
+        <div>
+          <dt>Cliente no Mega</dt>
+          <dd>{m.cliente || TRACO}</dd>
+        </div>
+        <div>
+          <dt>PO no pedido</dt>
+          <dd className="mono">{m.po || TRACO}</dd>
+        </div>
+      </dl>
+      {(itemDiferente || descricaoDiferente) && (
+        <Faixa tipo="alerta" papel="note">
+          No Mega esta OP está com {itemDiferente && <>o item <strong className="mono">{m.coditem}</strong></>}
+          {itemDiferente && descricaoDiferente && ' e '}
+          {descricaoDiferente && <>a descrição “{m.descricao}”</>}. O cadastro não foi alterado: confira e corrija acima, se for o caso.
+        </Faixa>
+      )}
+
+      <h4 className="cad-mega-subtitulo">Notas fiscais de saída{m.pedido_notas ? ` do pedido ${m.pedido_notas}` : ''}</h4>
+      {m.pedido_notas && !m.notas_do_piv && (
+        <p className="dica">
+          É o pedido para o qual a OP foi aberta, que nem sempre é o do faturamento. Se ela foi faturada por outro pedido, preencha o PIV
+          acima: na próxima busca aparecem as notas dele.
+        </p>
+      )}
+      {m.ops_mesmo_pedido > 1 && (
+        <Faixa tipo="alerta" papel="note">
+          Esse pedido tem <strong>{inteiro(m.ops_mesmo_pedido)} OPs deste item</strong>. O Mega liga a nota fiscal ao pedido, não à OP: as
+          notas abaixo são do pedido inteiro e não dá para saber qual é de cada OP.
+        </Faixa>
+      )}
+      {!m.pedido_notas ? (
+        <p className="dica">A OP não tem pedido no Mega e o PIV está vazio.</p>
+      ) : m.notas.length === 0 ? (
+        <p className="dica">Nenhuma nota fiscal de saída deste item no pedido.</p>
+      ) : (
+        <div className="tabela-rolagem">
+          <table className="tabela">
+            <caption className="so-leitor">Notas fiscais de saída do item no pedido</caption>
+            <thead>
+              <tr>
+                <th scope="col">NF</th>
+                <th scope="col">Data</th>
+                <th scope="col" className="num">
+                  Quantidade
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {m.notas.map((n) => (
+                <tr key={n.nf}>
+                  <td className="mono">{n.nf}</td>
+                  <td>{dataCurta(n.data)}</td>
+                  <td className="num">{inteiro(n.qtd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
 }
 
 // ---------------------------------------------------------------- importação da planilha nova
@@ -297,6 +406,8 @@ function ImportarPlanilha({ aoFechar, aoIncluir }: { aoFechar: () => void; aoInc
 export function OrdensProducao() {
   const avisos = useAvisos();
   const lista = useCarga<OrdemProducao[]>((sinal) => api('/ordens-producao', { sinal }), []);
+  const mega = useCarga<SituacaoMega>((sinal) => api('/ordens-producao/mega', { sinal }), []);
+  const [buscandoMega, setBuscandoMega] = useState(false);
   const [busca, setBusca] = useState('');
   const [tipo, setTipo] = useState('');
   const [importando, setImportando] = useState(false);
@@ -322,8 +433,23 @@ export function OrdensProducao() {
       { chave: 'coditem', titulo: 'CODITEM', mono: true, valor: (o) => o.coditem, celula: (o) => o.coditem || TRACO },
       { chave: 'descricao', titulo: 'Descrição', valor: (o) => o.descricao, celula: (o) => <span className="cad-descricao">{o.descricao || TRACO}</span> },
       { chave: 'tipo', titulo: 'Tipo', valor: (o) => o.tipo, celula: (o) => (o.tipo ? <SeloTipo tipo={o.tipo} /> : TRACO) },
+      {
+        chave: 'situacao', titulo: 'Situação', dica: 'Situação da OP no Mega', valor: (o) => situacaoOp(o.situacao_op),
+        celula: (o) => <span className={o.situacao_op === 'CA' ? 'texto-erro' : undefined}>{situacaoOp(o.situacao_op)}</span>,
+      },
       { chave: 'data', titulo: 'Data fat.', valor: (o) => o.data_faturamento, celula: (o) => dataCurta(o.data_faturamento) },
-      { chave: 'nf', titulo: 'NF', mono: true, valor: (o) => o.nf, celula: (o) => o.nf || TRACO },
+      {
+        chave: 'nf', titulo: 'NF', mono: true, valor: (o) => o.nf,
+        celula: (o) =>
+          o.nf ||
+          ((o.dados_mega?.notas.length ?? 0) > 0 ? (
+            <span className="cad-nf-pedido" title="Notas de saída do pedido no Mega: veja em Editar">
+              {inteiro(o.dados_mega?.notas.length)} no Mega
+            </span>
+          ) : (
+            TRACO
+          )),
+      },
       { chave: 'piv', titulo: 'Pedido (PIV)', mono: true, valor: (o) => o.piv, celula: (o) => o.piv || TRACO },
       { chave: 'qt_lote', titulo: 'QT lote', numerica: true, valor: (o) => o.qt_lote, celula: (o) => inteiro(o.qt_lote) },
       { chave: 'qt_fat', titulo: 'Qtd. faturada', numerica: true, valor: (o) => o.qt_faturada, celula: (o) => inteiro(o.qt_faturada) },
@@ -356,6 +482,20 @@ export function OrdensProducao() {
     }
   }
 
+  async function buscarNoMega() {
+    setBuscandoMega(true);
+    try {
+      const r = await api<{ mensagem: string }>('/ordens-producao/buscar-mega', { metodo: 'POST' });
+      avisos.sucesso(r.mensagem);
+      lista.recarregar();
+    } catch (falha) {
+      avisos.erro(mensagemDeErro(falha));
+    } finally {
+      setBuscandoMega(false);
+      mega.recarregar();
+    }
+  }
+
   async function salvar() {
     if (!edicao) return;
     setErro(null);
@@ -383,6 +523,11 @@ export function OrdensProducao() {
         titulo="Ordens de produção"
         apoio="Cadastro mestre das OPs (cliente, item, quantidade, pedidos), que era a planilha de OPs. É dele que vêm o CODITEM e os dados do pedido nas telas de lote, OF e databook."
       >
+        {mega.dados?.pronto && (
+          <button type="button" className="botao" onClick={() => void buscarNoMega()} disabled={buscandoMega}>
+            {buscandoMega ? 'Buscando no Mega…' : 'Buscar no Mega'}
+          </button>
+        )}
         <button type="button" className="botao" onClick={() => void exportar()} disabled={exportando}>
           {exportando ? 'Gerando…' : 'Exportar para Excel'}
         </button>
@@ -393,6 +538,27 @@ export function OrdensProducao() {
           Nova OP
         </button>
       </Cabecalho>
+
+      {mega.dados?.ultima &&
+        (mega.dados.ultima.erro ? (
+          <Faixa tipo="erro" papel="status">
+            A última busca no Mega ({resumoBusca(mega.dados.ultima)}) não deu certo: {mega.dados.ultima.erro}. O cadastro ficou como estava.
+          </Faixa>
+        ) : (
+          <div className="cad-mega-ultima">
+            <p>Última busca no Mega: {resumoBusca(mega.dados.ultima)}</p>
+            {(mega.dados.ultima.ops_divergentes ?? []).length > 0 && (
+              <p>
+                Item ou descrição diferente do Mega (o cadastro não foi alterado), confira:{' '}
+                {(mega.dados.ultima.ops_divergentes ?? []).map((op) => (
+                  <button key={op} type="button" className="botao-link" onClick={() => setBusca(op)}>
+                    OP {op}
+                  </button>
+                ))}
+              </p>
+            )}
+          </div>
+        ))}
 
       {importando && (
         <ImportarPlanilha
@@ -478,6 +644,7 @@ export function OrdensProducao() {
                 onChange={(e) => mudar({ qt_faturada: e.target.value })} />
             </Campo>
           </div>
+          {edicao.item?.dados_mega && <DadosDoMega ordem={edicao.item} />}
         </ModalFormulario>
       )}
     </>

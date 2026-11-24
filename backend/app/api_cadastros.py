@@ -10,7 +10,9 @@ prestadores_pagina, fornecedores_mp_pagina e a atualização da planilha de OPs)
 """
 import io
 import json
+import logging
 import re
+import threading
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -20,7 +22,7 @@ from sqlalchemy import func, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import parametros
+from app import mega, parametros
 from app.api_auth import _usuario as usuario_para_tela
 from app.arquivos import IMAGENS, PLANILHAS, conferir_conteudo, resposta_arquivo, salvar_bytes, salvar_upload
 from app.config import agora_local
@@ -420,6 +422,42 @@ def aplicar_planilha(
              "alteradas_nao_aplicadas": len(resultado["alteradas"]), "ausentes_na_planilha": len(resultado["ausentes"])})  # fmt: skip
     db.commit()
     return {"incluidas": [o.op for o in incluidas], "mensagem": f"{len(incluidas)} OP(s) nova(s) incluída(s) no cadastro."}
+
+
+# ---------------------------------------------------------------- busca no Mega (somente leitura)
+
+log = logging.getLogger("uvicorn.error")
+_busca_mega = threading.Lock()  # uma busca por vez neste processo; o cron roda em outro e a chave única da OP protege
+
+
+@rota.get("/ordens-producao/mega")
+def situacao_mega(_: Contexto = Depends(CADASTROS), db: Session = Depends(get_db)) -> dict:
+    """Se a busca no Mega está disponível e como foi a última (pelo botão ou pelo agendamento)."""
+    pronto, motivo = mega.situacao()
+    return {"pronto": pronto, "motivo": motivo, "ultima": mega.ultima_busca(db)}
+
+
+@rota.post("/ordens-producao/buscar-mega")
+def buscar_mega(ctx: Contexto = Depends(CADASTROS), db: Session = Depends(get_db)) -> dict:
+    """Lê as OPs no Mega e atualiza o cadastro (regras em app/mega.py). O Mega nunca é alterado."""
+    pronto, motivo = mega.situacao()
+    if not pronto:
+        raise HTTPException(409, motivo)
+    if not _busca_mega.acquire(blocking=False):
+        raise HTTPException(409, "Já há uma busca no Mega em andamento. Aguarde alguns segundos e atualize a tela.")
+    try:
+        resumo = mega.sincronizar(db, ctx)
+    except Exception as erro:  # noqa: BLE001 — qualquer falha vira mensagem na tela e fica na auditoria
+        log.exception("Falha na busca de OPs no Mega")  # o detalhe fica só no log do contêiner
+        mensagem = mega.registrar_falha(db, ctx, erro)
+        raise HTTPException(502, f"Não foi possível buscar no Mega: {mensagem}") from None
+    finally:
+        _busca_mega.release()
+    mensagem = f"Busca no Mega concluída: {len(resumo.novas)} OP(s) nova(s) e {len(resumo.atualizadas)} atualizada(s)."
+    if resumo.divergentes:
+        mensagem += f" {len(resumo.divergentes)} OP(s) com item ou descrição diferente do Mega: confira (o cadastro não foi alterado)."
+    return {"novas": resumo.novas, "atualizadas": len(resumo.atualizadas), "divergentes": sorted(resumo.divergentes),
+            "lidas": resumo.lidas, "mensagem": mensagem, "ultima": mega.ultima_busca(db)}  # fmt: skip
 
 
 # ---------------------------------------------------------------- parâmetros (administrador)

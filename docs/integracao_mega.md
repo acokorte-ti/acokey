@@ -30,6 +30,28 @@ filial de Itu `FIL_IN_CODIGO = 3`.
   NF_SEQ_IN_CODIGO, NF_NOT_IN_CODIGO, NF_ITN_IN_SEQUENCIA` (item da nota em `VEN_ITEMNOTAFISCAL`, nota em `VEN_NOTAFISCAL`).
 - Quantidade daquele item do pedido naquela nota: `IPN_RE_QUANTIDADE`.
 
+## Busca das OPs: o que a comparação com a planilha mostrou (24/11/2026)
+
+Consulta nova rodada na produção, só leitura, e aplicada num banco de teste carregado com a planilha de OPs do
+sistema antigo (só contagens; nenhum dado real no repositório):
+
+- A busca leu 171 OPs de chaveta da filial desde 2024; 104 das 106 OPs da planilha vieram (das 2 que faltaram, uma
+  foi aberta antes de 2024 e a outra não existe no Mega). Item, descrição e classificação batem em 103 de 104.
+- As 67 OPs que estão no Mega e não na planilha estão **encerradas** ou canceladas (histórico que a Qualidade não
+  controlou): por isso só entra como OP nova a que não estiver encerrada nem cancelada.
+- **Pedido de origem ≠ pedido do faturamento.** O pedido que o Mega liga à OP (`PRO_ORIGEM`) é aquele para o qual
+  ela foi aberta. Em 4 de 13 OPs com os dois preenchidos, a planilha tem outro PIV, e a NF digitada estava em
+  20 de 20 casos entre as notas do **PIV da planilha**. Preencher NF pelo pedido de origem gravaria nota errada em
+  3 de 9 OPs. Por isso a busca nunca preenche PIV, NF, data nem quantidade faturada; ela guarda as notas do item
+  no pedido como referência, buscando primeiro pelo PIV digitado. Com essa regra, as notas mostradas contêm a NF
+  digitada em 19 de 19 OPs.
+- 80 das 104 OPs não têm pedido nem cliente no Mega (sem `PRO_ORIGEM` e sem número em `ORD_ST_ALTERNATIVO`).
+- O nome do cliente no Mega (`AGN_ST_FANTASIA`) é escrito diferente do usado na planilha: a busca reaproveita o
+  nome que a Qualidade já usa para o mesmo cliente (é o que sai nos relatórios).
+- O PO (vazio em toda a planilha) é preenchido em 19 OPs, sempre a partir do PIV digitado.
+- Situação das notas ligadas: `NOT_CH_SITUACAO` L (129 vínculos) e N (23); nota cancelada é descartada por
+  `NOT_DT_CANCELAMENTO`.
+
 ## Matéria-prima (a mapear)
 
 NF de entrada e fornecedor: `EST_RECEBIMENTO` / `EST_ITENSRECEB` + `GLO_AGENTES` (mapeados nos Indicadores de
