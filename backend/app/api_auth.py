@@ -21,7 +21,6 @@ from app.seguranca import (
     encerrar_sessao,
     hash_senha,
     ip_cliente,
-    validar_senha_nova,
     verificar_senha,
 )
 
@@ -117,7 +116,7 @@ def trocar_senha(dados: TrocaSenha, ctx: Contexto = Depends(contexto), db: Sessi
         raise HTTPException(422, "A senha atual não confere.")
     if dados.senha_nova == dados.senha_atual:
         raise HTTPException(422, "A senha nova precisa ser diferente da atual.")
-    validar_senha_nova(dados.senha_nova, usuario.login)
+    # Sem regra de formato: a pessoa escolhe a senha que quiser (só não pode ficar em branco)
     usuario.senha_hash = hash_senha(dados.senha_nova)
     usuario.trocar_senha = False
     # Derruba as outras sessões abertas com a senha antiga
@@ -177,7 +176,6 @@ def listar_usuarios(_: Contexto = Depends(ADMIN), db: Session = Depends(get_db))
 def criar_usuario(dados: UsuarioNovo, ctx: Contexto = Depends(ADMIN), db: Session = Depends(get_db)) -> dict:
     _validar_modulos(dados.modulos)
     login = dados.login.strip().lower()
-    validar_senha_nova(dados.senha, login)
     usuario = Usuario(
         login=login,
         nome=dados.nome.strip(),
@@ -245,7 +243,6 @@ def redefinir_senha(
     usuario = db.get(Usuario, usuario_id)
     if not usuario:
         raise HTTPException(404, "Usuário não encontrado.")
-    validar_senha_nova(dados.senha, usuario.login)
     usuario.senha_hash = hash_senha(dados.senha)
     usuario.trocar_senha = True  # a pessoa escolhe a própria senha no próximo acesso
     usuario.tentativas_falhas = 0

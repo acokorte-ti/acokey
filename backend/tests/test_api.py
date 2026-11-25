@@ -41,6 +41,33 @@ def test_administrador_inicial_precisa_trocar_a_senha(cliente):
     assert r.status_code == 403 and r.json()["detail"] == "TROCAR_SENHA"
 
 
+def test_senha_e_livre_na_provisoria_e_na_escolhida_pela_pessoa(cliente):
+    """Sem regra de formato: curta, só números ou igual ao login. Só não pode ficar em branco nem repetir a atual."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    csrf = admin_pronto(cliente)
+    maria = _criar_usuario(cliente, csrf, senha="1")
+    with TestClient(app) as sessao_maria:
+        csrf_maria = entrar(sessao_maria, "maria.silva", "1")
+        troca = {"senha_atual": "1", "senha_nova": "1"}
+        r = sessao_maria.post("/api/auth/trocar-senha", json=troca, headers={"X-CSRF-Token": csrf_maria})
+        assert r.status_code == 422 and "diferente da atual" in r.json()["detail"]
+        troca["senha_nova"] = "maria.silva"
+        r = sessao_maria.post("/api/auth/trocar-senha", json=troca, headers={"X-CSRF-Token": csrf_maria})
+        assert r.status_code == 200, r.text
+        assert r.json()["usuario"]["trocar_senha"] is False
+
+    r = cliente.post(f"/api/usuarios/{maria['id']}/senha", json={"senha": "123"}, headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 200, r.text
+    with TestClient(app) as sessao_maria:
+        entrar(sessao_maria, "maria.silva", "123")
+
+    r = cliente.post(f"/api/usuarios/{maria['id']}/senha", json={"senha": ""}, headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 422
+
+
 def test_gravacao_sem_token_csrf_e_recusada(cliente):
     admin_pronto(cliente)
     r = cliente.post("/api/usuarios", json={"login": "x.y", "nome": "Xy", "senha": "Provisoria-2026"})

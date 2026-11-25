@@ -58,16 +58,6 @@ def verificar_senha(hash_gravado: str | None, senha: str) -> bool:
         return False
 
 
-def validar_senha_nova(senha: str, login: str) -> None:
-    minimo = config().senha_tamanho_minimo
-    if len(senha) < minimo:
-        raise HTTPException(422, f"A senha precisa ter pelo menos {minimo} caracteres.")
-    if senha.isdigit() or senha.isalpha():
-        raise HTTPException(422, "A senha precisa misturar letras e números.")
-    if login.lower() in senha.lower():
-        raise HTTPException(422, "A senha não pode conter o seu login.")
-
-
 def _resumo(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 

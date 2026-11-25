@@ -91,7 +91,7 @@ Para subir localmente, crie `backend\.env` (fica fora do Git) com:
 APP_ENV=dev
 DATABASE_URL=sqlite:///../dados_dev/acokey.db
 ARQUIVOS_DIR=../dados_dev/arquivos
-ADMIN_SENHA_INICIAL=<uma senha com letras e números, 10+ caracteres>
+ADMIN_SENHA_INICIAL=<uma senha só para o primeiro acesso: o sistema obriga a trocar>
 ```
 
 ```powershell

@@ -1,7 +1,5 @@
-import pytest
-from fastapi import HTTPException
-
-from app.seguranca import celula_segura, diferencas, hash_senha, limpar_texto, validar_senha_nova, verificar_senha
+from app.seguranca import celula_segura, diferencas, hash_senha, limpar_texto, verificar_senha
+from app.sementes import _senha_inicial_aceitavel
 
 
 def test_senha_confere_e_nao_fica_legivel():
@@ -23,14 +21,12 @@ def test_hash_e_texto_puro_do_sistema_antigo_nao_valem():
     assert not verificar_senha("minhasenha123", "minhasenha123")
 
 
-@pytest.mark.parametrize("senha", ["curta1", "somenteletrasaqui", "12345678901234", "fulano.tal-2026"])
-def test_senhas_fracas_sao_recusadas(senha):
-    with pytest.raises(HTTPException):
-        validar_senha_nova(senha, "fulano.tal")
-
-
-def test_senha_boa_passa():
-    validar_senha_nova("Chaveta-Forno-2026", "fulano.tal")
+def test_senha_inicial_do_env_so_recusa_vazia_ou_a_do_modelo():
+    """Sem regra de formato; só não vale ficar em branco nem usar o valor público do .env.example."""
+    assert _senha_inicial_aceitavel("1234")
+    assert not _senha_inicial_aceitavel("")
+    assert not _senha_inicial_aceitavel("   ")
+    assert not _senha_inicial_aceitavel("TROQUE_AQUI")
 
 
 def test_texto_perde_caracteres_de_controle_mas_mantem_quebra_de_linha():

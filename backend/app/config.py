@@ -25,7 +25,6 @@ class Config(BaseSettings):
     sessao_max_dias: int = 7  # mesmo em uso contínuo, exige novo login depois disso
     login_max_tentativas: int = 5
     login_bloqueio_minutos: int = 15
-    senha_tamanho_minimo: int = 10
 
     # ERP Mega (Oracle), SOMENTE LEITURA, com usuário próprio deste sistema (acokey_ro). Ver backend/app/mega.py,
     # docs/integracao_mega.md e scripts/mega/01_criar_usuario_leitura.sql

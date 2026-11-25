@@ -31,7 +31,7 @@ def main() -> None:
         usuario.tentativas_falhas = 0
         usuario.bloqueado_ate = None
         if opcoes.comando == "senha-provisoria":
-            senha = secrets.token_urlsafe(12) + "a1"
+            senha = secrets.token_urlsafe(12)
             usuario.senha_hash = hash_senha(senha)
             usuario.trocar_senha = True
             usuario.ativo = True

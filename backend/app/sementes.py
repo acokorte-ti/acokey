@@ -2,13 +2,12 @@
 import logging
 from datetime import UTC, datetime
 
-from fastapi import HTTPException
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 from app.config import config
 from app.models import Sessao, Usuario
-from app.seguranca import hash_senha, validar_senha_nova
+from app.seguranca import hash_senha
 
 log = logging.getLogger("uvicorn.error")
 
@@ -24,7 +23,7 @@ def semear(db: Session) -> None:
         login = cfg.admin_login.strip().lower()
         if db.scalar(select(Usuario).where(func.lower(Usuario.login) == login)):
             log.error("Nenhum administrador e o login %r já existe sem ser administrador: nada foi criado.", login)
-        elif _senha_inicial_aceitavel(cfg.admin_senha_inicial, login):
+        elif _senha_inicial_aceitavel(cfg.admin_senha_inicial):
             db.add(
                 Usuario(
                     login=login,
@@ -37,18 +36,12 @@ def semear(db: Session) -> None:
             log.info("Administrador inicial criado: %s (a senha deve ser trocada no primeiro acesso)", login)
         else:
             log.error(
-                "Nenhum administrador cadastrado e ADMIN_SENHA_INICIAL ausente, fraca ou ainda com o valor do modelo: "
+                "Nenhum administrador cadastrado e ADMIN_SENHA_INICIAL ausente ou ainda com o valor do modelo: "
                 "o administrador NÃO foi criado. Corrija o .env e reinicie a API."
             )
     db.commit()
 
 
-def _senha_inicial_aceitavel(senha: str, login: str) -> bool:
+def _senha_inicial_aceitavel(senha: str) -> bool:
     """O valor do .env.example é público: com ele, qualquer pessoa na rede tomaria a conta de administrador."""
-    if not senha or "TROQUE" in senha.upper():
-        return False
-    try:
-        validar_senha_nova(senha, login)
-    except HTTPException:
-        return False
-    return True
+    return bool(senha.strip()) and "TROQUE" not in senha.upper()

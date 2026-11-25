@@ -6,29 +6,6 @@ import type { Usuario } from '../lib/tipos';
 import { Campo } from './Campo';
 import { CampoSenha } from './CampoSenha';
 
-const TAMANHO_MINIMO = 10;
-
-/** As mesmas regras que o servidor confere (ele é quem decide; aqui é só para orientar). */
-export function regrasDaSenha(senha: string): { texto: string; ok: boolean }[] {
-  return [
-    { texto: `Pelo menos ${TAMANHO_MINIMO} caracteres`, ok: senha.length >= TAMANHO_MINIMO },
-    { texto: 'Letras e números misturados', ok: /\d/.test(senha) && /\D/.test(senha) },
-  ];
-}
-
-export function ListaRegras({ senha }: { senha: string }) {
-  return (
-    <ul className="regras-senha">
-      {regrasDaSenha(senha).map((regra) => (
-        <li key={regra.texto} className={regra.ok ? 'regra-ok' : undefined}>
-          <span aria-hidden="true">{regra.ok ? '✓' : '○'}</span> {regra.texto}
-          <span className="so-leitor">{regra.ok ? ' (atendido)' : ' (falta)'}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 /** Troca da própria senha: usada na tela obrigatória do primeiro acesso e em "Minha conta". */
 export function FormSenha({ rotuloSenhaAtual = 'Senha atual' }: { rotuloSenhaAtual?: string }) {
   const { atualizarUsuario } = useSessao();
@@ -81,15 +58,10 @@ export function FormSenha({ rotuloSenhaAtual = 'Senha atual' }: { rotuloSenhaAtu
           id="senha-nova"
           autoComplete="new-password"
           required
-          minLength={TAMANHO_MINIMO}
-          aria-describedby="senha-regras"
           value={nova}
           onChange={(e) => setNova(e.target.value)}
         />
       </Campo>
-      <div id="senha-regras">
-        <ListaRegras senha={nova} />
-      </div>
       <Campo rotulo="Repita a senha nova" para="senha-confirmacao" obrigatorio>
         <CampoSenha
           id="senha-confirmacao"

@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Campo, Marcacao } from '../componentes/Campo';
 import { Cabecalho, Carregando, ErroCarga, SeloAtivo, Vazio } from '../componentes/Estados';
-import { ListaRegras } from '../componentes/FormSenha';
 import { Modal, ModalFormulario } from '../componentes/Modal';
 import { TabelaOrdenavel, type Coluna } from '../componentes/Tabela';
 import { api, mensagemDeErro } from '../lib/api';
@@ -135,7 +134,6 @@ function CampoSenhaProvisoria({ senha, aoMudar }: { senha: string; aoMudar: (sen
           </button>
         </div>
       </Campo>
-      <ListaRegras senha={senha} />
     </>
   );
 }
