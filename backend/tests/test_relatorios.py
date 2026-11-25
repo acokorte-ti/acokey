@@ -130,14 +130,12 @@ def test_dureza_reprovada_abre_nc_e_retrabalho_aprovado_encerra(db, base, como):
 
 def test_dureza_validacoes(db, base, como):
     lote = lote_exemplo(db, **LOTE_PIN)
-    ark = lote_exemplo(db, numero="26-4-900002", op="900002", tipo="ARK")
     qualidade, csrf = como(modulos=["qualidade"], pode_aprovar=True, login="gerente")
     _, _ = como(modulos=["qualidade"], login="inspetor")
     gerente, inspetor, admin = _id(db, "gerente"), _id(db, "inspetor"), _id(db, "admin")
     cab = {"X-CSRF-Token": csrf}
     url = f"/api/relatorios/dureza/{lote.id}"
 
-    assert qualidade.get(f"/api/relatorios/dureza/{ark.id}").status_code == 422  # ARK não faz RIP-35
     casos = [
         (_dureza(inspetor, gerente, "", ""), "pelo menos uma leitura"),
         (_dureza(inspetor, gerente, "abc"), "use números"),
@@ -156,6 +154,25 @@ def test_dureza_validacoes(db, base, como):
     r = qualidade.get(url)
     assert r.status_code == 422 and "especificação de dureza" in r.json()["detail"]  # nunca inventar o limite
     assert db.scalar(select(Registro).where(Registro.etapa == "dureza")) is None
+
+
+def test_rip35_do_ark_usa_a_faixa_do_ark_e_sai_sem_figura(db, base, como):
+    """Dureza é opcional no ARK: o RIP-35 sai com a faixa do ARK; sem a imagem dos pontos no servidor, sem a figura."""
+    ark = lote_exemplo(db, numero="26-4-900002", op="900002", tipo="ARK")
+    qualidade, csrf = como(modulos=["qualidade"], pode_aprovar=True, login="gerente")
+    gerente = _id(db, "gerente")
+    tela = qualidade.get(f"/api/relatorios/dureza/{ark.id}")
+    assert tela.status_code == 200, tela.text
+    assert tela.json()["info"]["especificacao"] == "43 a 48 HRc" and tela.json()["info"]["material"] == "H11 Modified"
+    assert tela.json()["imagem_pontos"] == "dureza_ark.png" and tela.json()["tem_imagem_pontos"] is False
+
+    cab = {"X-CSRF-Token": csrf}
+    r = qualidade.post(f"/api/relatorios/dureza/{ark.id}", json=_dureza(gerente, gerente, "44", "45", "45", "44", "45"), headers=cab)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "APROVADO" and r.json()["avancou"] is False
+    assert _ultimo(db, Anexo, ark.id, "dureza").nome == "3-RIP-35-Dureza-OP900002-ARK.pdf"
+    r = qualidade.post(f"/api/relatorios/dureza/{ark.id}", json=_dureza(gerente, gerente, "36"), headers=cab)
+    assert r.json()["status"] == "REPROVADO"  # 36 serve para PIN/BOX, não para o ARK
 
 
 def test_dureza_e_visual_so_para_a_qualidade(db, base, como):

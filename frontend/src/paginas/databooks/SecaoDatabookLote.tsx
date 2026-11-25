@@ -187,7 +187,10 @@ function FormularioGeracao({ dados, aoGerar }: { dados: DatabookDoLote; aoGerar:
           </div>
         </dl>
         {!capa.op_cadastrada && (
-          <p className="texto-alerta">A OP {dados.lote.op} não está no cadastro de OPs: cliente, projeto e pedido saem em branco.</p>
+          <p className="texto-alerta" role="alert">
+            A OP {dados.lote.op} não existe no cadastro de OPs, por isso o databook não pode ser gerado. Corrija a OP do lote (Editar lote)
+            ou cadastre a OP em Cadastros › Ordens de produção.
+          </p>
         )}
       </div>
 
@@ -197,7 +200,7 @@ function FormularioGeracao({ dados, aoGerar }: { dados: DatabookDoLote; aoGerar:
         </p>
       )}
       <div className="acoes">
-        <button type="submit" className="botao botao-primario" disabled={enviando}>
+        <button type="submit" className="botao botao-primario" disabled={enviando || !capa.op_cadastrada}>
           {enviando ? 'Gerando o databook…' : novaRevisao ? `Gerar nova revisão (Rev ${capa.proxima_revisao})` : 'Gerar databook'}
         </button>
         {enviando && <span className="dica">Juntando os documentos das etapas. Pode levar alguns segundos.</span>}

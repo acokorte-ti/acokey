@@ -4,6 +4,9 @@ Regras trazidas do sistema antigo (legado/app.py: ETAPAS, etapa_aplicavel, subs_
 pode_avancar, _nc_libera_avanco, _nc_pendente_etapa). As funções daqui são puras: recebem o estado já
 lido do banco (ver estado.py), para poderem ser testadas sem banco.
 
+Etapa OPCIONAL para um tipo (ex.: dureza e usinagem no ARK, pedido da Qualidade em 25/11/2026): aparece no lote e
+aceita registros, relatórios e anexos (que entram no databook), mas não trava o avanço nem conta no progresso.
+
 Regra central: um lote só avança quando TODOS os sub-registros aplicáveis da etapa estão aprovados.
 Uma reprovação bloqueia até a não conformidade ligada a ela ser encerrada como sucata, uso como está
 ou anulada. Retrabalho NÃO libera: o lote só segue quando um novo registro da mesma etapa é aprovado.
@@ -36,9 +39,18 @@ class Etapa:
     curto_por_tipo: Mapping[str, str] = field(default_factory=dict)
     relatorio_por_tipo: Mapping[str, str] = field(default_factory=dict)
     curto_gantt: str = ""
+    opcional_para: frozenset[str] = frozenset()  # tipos em que a etapa pode ser feita, sem travar o lote
 
     def aplicavel(self, tipo: str) -> bool:
+        """Obrigatória para o tipo: entra no fluxo (avanço, progresso, etapa atual)."""
         return tipo in self.tipos
+
+    def opcional(self, tipo: str) -> bool:
+        return tipo in self.opcional_para and tipo not in self.tipos
+
+    def abrivel(self, tipo: str) -> bool:
+        """Aparece no lote e aceita registros e anexos: obrigatória ou opcional para o tipo."""
+        return self.aplicavel(tipo) or self.opcional(tipo)
 
     def subs_de(self, tipo: str) -> tuple[str, ...]:
         return self.subs_por_tipo.get(tipo, self.subs)
@@ -61,12 +73,13 @@ ETAPAS: tuple[Etapa, ...] = (
     Etapa("trat_termico", "Tratamento térmico", "Trat. térmico", "Tratamento térmico", "tt", False,
           "Relatório de Tratamento Térmico"),
     Etapa("dureza", "Ensaio de dureza HRC", "Dureza HRC", "Controle de qualidade", "dureza", False,
-          "Relatório de Ensaio de Dureza (HRC)", tipos=frozenset({"PIN", "BOX"})),
+          "Relatório de Ensaio de Dureza (HRC)", tipos=frozenset({"PIN", "BOX"}), opcional_para=frozenset({"ARK"})),
     Etapa("lab_ext", "Ensaios de tração e impacto Charpy", "Tração / Charpy", "Laboratório externo", "lab", True, "",
           subs=("tracao", "charpy"), subs_por_tipo={"ARK": ("charpy",)},
           curto_por_tipo={"ARK": "Charpy"}, nome_por_tipo={"ARK": "Ensaio mecânico - Charpy"}),
     Etapa("usinagem", "Usinagem do perfil e controle dimensional", "Usinagem", "Usinagem", "dim", False,
-          "Relatório de Controle Dimensional (em processo)", tipos=frozenset({"PIN", "BOX"})),
+          "Relatório de Controle Dimensional (em processo)", tipos=frozenset({"PIN", "BOX"}),
+          opcional_para=frozenset({"ARK"})),
     Etapa("dim_final", "Inspeção dimensional final", "Dimensional final", "Controle de qualidade", "dim", False,
           "Relatório de Inspeção Dimensional Final"),
     Etapa("lp", "Ensaio NDT - líquido penetrante (trincas)", "Líq. penetrante", "Laboratório interno", "lp", False,
@@ -153,14 +166,16 @@ def nc_pendente_etapa(etapa: Etapa, tipo: str, estado: Estado) -> bool:
 
 
 def situacao_etapa(indice: int, tipo: str, estado: Estado, indice_real: int) -> str:
-    """aprovada | reprovada | atual | futura | nao_aplicavel — para as telas."""
+    """aprovada | reprovada | atual | futura | opcional | nao_aplicavel — para as telas."""
     etapa = ETAPAS[indice]
-    if not etapa.aplicavel(tipo):
+    if not etapa.abrivel(tipo):
         return "nao_aplicavel"
     if etapa_resolvida(etapa, tipo, estado):
         return "aprovada"
     if any(situacao_sub(estado, etapa, s).registro_status == "reprovado" for s in etapa.subs_de(tipo)):
         return "reprovada"
+    if etapa.opcional(tipo):
+        return "opcional"
     return "atual" if indice == indice_real else "futura"
 
 

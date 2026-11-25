@@ -166,6 +166,7 @@ export interface PaginaEtapaDados {
     exige_anexo: boolean;
     relatorio: string;
     aplicavel: boolean;
+    opcional?: boolean;
     situacao: string;
     subs: { sub: string; nome: string; status: StatusRegistro | null }[];
     /** O formulário detalhado só vale para etapa já liberada (o atalho por documento vale sempre). */

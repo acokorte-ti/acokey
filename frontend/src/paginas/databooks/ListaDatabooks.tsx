@@ -7,13 +7,13 @@ import { SeloTipo } from '../../componentes/Selos';
 import { TabelaOrdenavel, type Coluna } from '../../componentes/Tabela';
 import { api, consulta, enderecoApi, mensagemDeErro } from '../../lib/api';
 import { useAvisos } from '../../lib/avisos';
-import { dataCurta, dataHoraLocal, haDias, TRACO } from '../../lib/formato';
+import { contemTermos, dataCurta, dataHoraLocal, haDias, TRACO } from '../../lib/formato';
 import type { TipoLote } from '../../lib/tipos';
 import { useCarga } from '../../lib/useCarga';
 import { ModalEnvio } from './ModalEnvio';
-import type { DatabookAEnviar, DatabookEnvio, PainelDatabooks } from './tipos';
+import type { DatabookAEnviar, DatabookEnvio, DatabookGerado, PainelDatabooks } from './tipos';
 
-type Aba = 'a-enviar' | 'enviados';
+type Aba = 'a-enviar' | 'enviados' | 'todos';
 type FiltroTipo = '' | TipoLote;
 const TIPOS: { valor: FiltroTipo; rotulo: string }[] = [
   { valor: '', rotulo: 'Todos' },
@@ -36,7 +36,7 @@ function linkLote(lote: string, loteId: number | null) {
 
 /** "?aba=enviados&tipo=PIN" (vazio = aba "A enviar", todos os tipos). */
 function busca(aba: Aba, tipo: FiltroTipo): string {
-  return consulta({ aba: aba === 'enviados' ? 'enviados' : '', tipo });
+  return consulta({ aba: aba === 'a-enviar' ? '' : aba, tipo });
 }
 
 function enderecoAEnviar(d: DatabookAEnviar): string {
@@ -198,13 +198,119 @@ function TabelaEnviados({ itens, aoDesfazer }: { itens: DatabookEnvio[]; aoDesfa
   );
 }
 
+// ---------------------------------------------------------------- aba "Todos"
+
+function enderecoGerado(d: DatabookGerado, baixar: boolean): string {
+  const extra = { baixar: baixar || undefined };
+  return d.envio_id
+    ? enderecoApi(`/databooks/envios/${d.envio_id}/arquivo`, extra)
+    : enderecoApi('/databooks/arquivo', { op: d.op, tipo: d.tipo, arquivo: d.arquivo, ...extra });
+}
+
+function situacaoGerado(d: DatabookGerado): { texto: string; classe: string } {
+  if (d.enviado_em) return { texto: `Enviado-DB em ${dataCurta(d.enviado_em)}`, classe: 'selo-ok' };
+  if (d.lote_cancelado) return { texto: 'Lote cancelado', classe: 'selo-inativo' };
+  return d.ultima ? { texto: 'Revisão atual', classe: 'selo-andamento' } : { texto: 'Revisão anterior', classe: 'selo-inativo' };
+}
+
+function TabelaTodos({ itens }: { itens: DatabookGerado[] }) {
+  const colunas: Coluna<DatabookGerado>[] = [
+    { chave: 'op', titulo: 'OP', mono: true, valor: (d) => d.op },
+    { chave: 'tipo', titulo: 'Tipo', valor: (d) => d.tipo, celula: (d) => <SeloTipo tipo={d.tipo} /> },
+    { chave: 'rev', titulo: 'Revisão', numerica: true, valor: (d) => d.revisao ?? -1, celula: (d) => <span className="db-rev">Rev {d.revisao ?? TRACO}</span> },
+    {
+      chave: 'lote',
+      titulo: 'Lote e arquivo',
+      valor: (d) => d.lote,
+      celula: (d) => (
+        <>
+          {linkLote(d.lote, d.lote_id)}
+          <span className="db-arquivo">
+            {d.arquivo} · {d.tamanho_mb.toLocaleString('pt-BR')} MB
+          </span>
+        </>
+      ),
+    },
+    { chave: 'gerado', titulo: 'Gerado em', valor: (d) => d.modificado, celula: (d) => dataHoraLocal(d.modificado) },
+    {
+      chave: 'situacao',
+      titulo: 'Situação',
+      valor: (d) => situacaoGerado(d).texto,
+      celula: (d) => {
+        const s = situacaoGerado(d);
+        return <span className={`selo ${s.classe}`}>{s.texto}</span>;
+      },
+    },
+    {
+      chave: 'acoes',
+      titulo: 'Ações',
+      ordenavel: false,
+      valor: () => '',
+      celula: (d) => (
+        <span className="db-acoes">
+          <a className="botao-link" href={enderecoGerado(d, false)} target="_blank" rel="noopener">
+            Abrir PDF<span className="so-leitor"> (abre em outra aba)</span>
+          </a>
+          <a className="botao botao-pequeno" href={enderecoGerado(d, true)} download={d.arquivo}>
+            Baixar<span className="so-leitor"> {d.arquivo}</span>
+          </a>
+        </span>
+      ),
+    },
+  ];
+  return (
+    <TabelaOrdenavel
+      legenda="Todos os databooks gerados"
+      colunas={colunas}
+      linhas={itens}
+      chaveLinha={(d) => d.arquivo}
+      ordemInicial={{ chave: 'gerado', direcao: 'desc' }}
+    />
+  );
+}
+
+function AbaTodos({ tipo }: { tipo: FiltroTipo }) {
+  const carga = useCarga<{ itens: DatabookGerado[] }>((sinal) => api('/databooks/todos', { sinal }), []);
+  const [termo, setTermo] = useState('');
+  const itens = useMemo(
+    () => (carga.dados?.itens ?? []).filter((d) => (!tipo || d.tipo === tipo) && contemTermos(`${d.op} ${d.lote} ${d.arquivo}`, termo)),
+    [carga.dados, tipo, termo],
+  );
+  return (
+    <>
+      <div className="campo db-busca">
+        <label htmlFor="db-busca-todos">Buscar por OP, lote ou arquivo</label>
+        <input id="db-busca-todos" type="search" className="mono" autoComplete="off" spellCheck={false} value={termo} onChange={(e) => setTermo(e.target.value)} />
+      </div>
+      {carga.erro && <ErroCarga mensagem={carga.erro} aoTentar={carga.recarregar} />}
+      {!carga.erro && !carga.dados && <Carregando />}
+      {carga.dados && (
+        <div className={carga.carregando ? 'recarregando' : ''}>
+          {itens.length === 0 ? (
+            <Vazio titulo={termo || tipo ? 'Nenhum databook com esse filtro.' : 'Nenhum databook gerado ainda.'} />
+          ) : (
+            <>
+              <TabelaTodos itens={itens} />
+              <p className="dica" style={{ marginTop: 8 }}>
+                {itens.length} databook(s). Inclui as revisões anteriores e os gerados pelo sistema antigo. Para mandar ao cliente, use a aba
+                A enviar.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 // ---------------------------------------------------------------- tela
 
 /** /databooks: abas "A enviar" e "Enviados-DB" (aceita ?aba= ou ?tab=, e ?tipo=PIN|BOX|ARK, vindos do painel). */
 export function ListaDatabooks() {
   const avisos = useAvisos();
   const [parametros, setParametros] = useSearchParams();
-  const aba: Aba = (parametros.get('aba') ?? parametros.get('tab')) === 'enviados' ? 'enviados' : 'a-enviar';
+  const abaUrl = parametros.get('aba') ?? parametros.get('tab');
+  const aba: Aba = abaUrl === 'enviados' || abaUrl === 'todos' ? abaUrl : 'a-enviar';
   const tipoUrl = (parametros.get('tipo') ?? '').toUpperCase();
   const tipo: FiltroTipo = tipoUrl === 'PIN' || tipoUrl === 'BOX' || tipoUrl === 'ARK' ? tipoUrl : '';
   const [incluirDesfeitos, setIncluirDesfeitos] = useState(false);
@@ -276,9 +382,17 @@ export function ListaDatabooks() {
         >
           Enviados-DB<span className="db-contagem">{dados?.n_enviados ?? TRACO}</span>
         </Link>
+        <Link
+          to={{ search: busca('todos', tipo) }}
+          replace
+          className={`aba ${aba === 'todos' ? 'aba-atual' : ''}`}
+          aria-current={aba === 'todos' ? 'page' : undefined}
+        >
+          Todos
+        </Link>
       </nav>
 
-      <section className="cartao cartao-aba" aria-label={aba === 'a-enviar' ? 'A enviar' : 'Enviados-DB'}>
+      <section className="cartao cartao-aba" aria-label={aba === 'a-enviar' ? 'A enviar' : aba === 'enviados' ? 'Enviados-DB' : 'Todos os databooks'}>
         <div className="db-topo-lista">
           <div className="db-acoes">
             <span className="dica" id="db-rotulo-tipo">
@@ -304,8 +418,9 @@ export function ListaDatabooks() {
             </Marcacao>
           )}
         </div>
-        {carga.erro && <ErroCarga mensagem={carga.erro} aoTentar={carga.recarregar} />}
-        {!carga.erro && !dados && <Carregando />}
+        {aba === 'todos' && <AbaTodos tipo={tipo} />}
+        {aba !== 'todos' && carga.erro && <ErroCarga mensagem={carga.erro} aoTentar={carga.recarregar} />}
+        {aba !== 'todos' && !carga.erro && !dados && <Carregando />}
         {dados && aba === 'a-enviar' && (
           <div className={carga.carregando ? 'recarregando' : ''}>
             {aEnviar.length === 0 ? (

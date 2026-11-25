@@ -192,6 +192,8 @@ def test_carimbar_aprova_e_propaga_para_os_lotes(qualidade, aprovador, db, pasta
     outro_id = _anexar(cli, csrf, mp_id, nome="Laudo dimensional.pdf")
     imagem_id = _anexar(cli, csrf, mp_id, nome="foto.png", conteudo=_png(), tipo="image/png")
     # Um lote criado pela corrida (recebe os certificados) e um lote antigo ligado só pelo texto da corrida
+    db.add(OrdemProducao(op="900001", tipo="PIN"))
+    db.commit()
     r = cli.post(f"/api/materia-prima/{mp_id}/lotes", json={"op": "900001", "numero": "26-4-900001", "qtd": 50},
                  headers={"X-CSRF-Token": csrf})  # fmt: skip
     assert r.status_code == 201, r.text

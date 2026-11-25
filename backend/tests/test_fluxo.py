@@ -33,6 +33,22 @@ def test_ark_pula_dureza_usinagem_e_tamboreamento_e_so_faz_charpy():
     assert fluxo.progresso("BOX", {}) == (0, 11)
 
 
+def test_dureza_e_usinagem_sao_opcionais_no_ark_e_nao_travam_o_lote():
+    dureza, usinagem = POR_CHAVE["dureza"], POR_CHAVE["usinagem"]
+    assert dureza.opcional("ARK") and usinagem.opcional("ARK") and not POR_CHAVE["tambor"].opcional("ARK")
+    assert dureza.abrivel("ARK") and not dureza.aplicavel("ARK")
+    assert not dureza.opcional("PIN") and dureza.aplicavel("PIN")  # no PIN/BOX continua obrigatória
+
+    estado = estado_aprovado("ARK", ate="lab_ext")  # MP e TT aprovados
+    assert fluxo.etapa_real("ARK", estado) == fluxo.INDICE["lab_ext"]  # a dureza não segura o ARK
+    indice = fluxo.INDICE["dureza"]
+    assert fluxo.situacao_etapa(indice, "ARK", estado, fluxo.etapa_real("ARK", estado)) == "opcional"
+    estado[("dureza", "")] = APROVADO
+    assert fluxo.situacao_etapa(indice, "ARK", estado, fluxo.etapa_real("ARK", estado)) == "aprovada"
+    assert fluxo.progresso("ARK", estado) == (2, 8)  # não conta no progresso
+    assert fluxo.situacao_etapa(fluxo.INDICE["tambor"], "ARK", estado, 0) == "nao_aplicavel"
+
+
 def test_nomes_mudam_por_tipo():
     fosfato = POR_CHAVE["fosfato"]
     assert fosfato.curto_de("ARK") == "Oxidação Negra"
@@ -96,5 +112,6 @@ def test_situacao_de_cada_etapa_para_a_tela():
     real = fluxo.etapa_real("PIN", estado)
     situacoes = [fluxo.situacao_etapa(i, "PIN", estado, real) for i in range(4)]
     assert situacoes == ["aprovada", "reprovada", "futura", "futura"]
-    assert fluxo.situacao_etapa(fluxo.INDICE["dureza"], "ARK", {}, 0) == "nao_aplicavel"
+    assert fluxo.situacao_etapa(fluxo.INDICE["tambor"], "ARK", {}, 0) == "nao_aplicavel"
+    assert fluxo.situacao_etapa(fluxo.INDICE["dureza"], "ARK", {}, 0) == "opcional"
     assert fluxo.situacao_etapa(0, "PIN", {}, 0) == "atual"

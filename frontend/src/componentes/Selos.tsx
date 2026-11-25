@@ -22,6 +22,7 @@ const SITUACAO_ETAPA: Record<SituacaoEtapa, Aparencia> = {
   reprovada: { rotulo: 'Reprovada', classe: 'selo-erro' },
   atual: { rotulo: 'Etapa atual', classe: 'selo-andamento' },
   futura: { rotulo: 'A fazer', classe: 'selo-espera' },
+  opcional: { rotulo: 'Opcional', classe: 'selo-espera' },
   nao_aplicavel: { rotulo: 'Não se aplica', classe: 'selo-inativo' },
 };
 

@@ -81,6 +81,14 @@ def test_novo_lote_com_sugestao_de_op(cliente, como, db):
                     headers=_h(csrf)).status_code == 409  # fmt: skip
     assert pcp.post("/api/lotes", json={"op": "900001", "numero": "x", "tipo": "XYZ", "qtd": 1}, headers=_h(csrf)).status_code == 422
     assert pcp.post("/api/lotes", json={"op": "900001", "numero": "y", "tipo": "PIN", "qtd": 0}, headers=_h(csrf)).status_code == 422
+    # OP digitada errada (fora do cadastro): nem cria nem muda o lote para ela
+    r = pcp.post("/api/lotes", json={"op": "900099", "numero": "26-4-900099", "tipo": "BOX", "qtd": 5}, headers=_h(csrf))
+    assert r.status_code == 422 and "OP 900099 não existe no cadastro" in r.json()["detail"]
+    r = pcp.patch(f"/api/lotes/{lote.id}", json={"op": "900099", "numero": "26-4-900001", "tipo": "BOX", "qtd": 48},
+                  headers=_h(csrf))  # fmt: skip
+    assert r.status_code == 422 and "OP 900099" in r.json()["detail"]
+    db.expire_all()
+    assert db.get(Lote, lote.id).op == "900001"
     assert pcp.get("/api/lotes/sugestoes-op", params={"q": "9000"}).json()[0]["lotes"] == 1
 
     tt, csrf_tt = como(modulos=["producao_tt"])
@@ -114,6 +122,7 @@ def test_editar_lote_limpo_e_com_registros(cliente, como, db):
 
 def test_cancelar_lote_libera_o_numero_e_respeita_o_databook(cliente, como, db, admin):
     lote = _lote(db, corrida="M999/26")
+    db.add(OrdemProducao(op="900001", tipo="PIN"))
     db.add(Anexo(lote_id=lote.id, etapa="receb_mp", nome="cert.pdf", arquivo="lotes/1/anexos/cert.pdf"))
     db.add(DatabookEnviado(op="900001", tipo="PIN", lote="26-4-900001"))
     db.commit()
@@ -183,7 +192,9 @@ def test_formulario_so_vale_para_etapa_liberada(cliente, como, db):
     r = _registrar(inspetor, csrf, lote.id, "dureza", {"min": "30", "leituras": "P1 35"})
     assert r.status_code == 409
     ark = lote_exemplo(db, numero="26-4-900002", tipo="ARK", etapa=5)
-    assert _registrar(inspetor, csrf, ark.id, "dureza", {"min": "30", "leituras": "P1 35"}).status_code == 422  # ARK não faz dureza
+    assert _registrar(inspetor, csrf, ark.id, "tambor", {}).status_code == 422  # ARK não faz tamboreamento
+    # Dureza é opcional no ARK: aceita o registro mesmo com o cursor em outra etapa
+    assert _registrar(inspetor, csrf, ark.id, "dureza", {"min": "30", "leituras": "P1 35"}).status_code == 201
 
 
 def test_quimica_grava_corrida_e_fica_pendente_sem_certificado(cliente, como, db):
@@ -486,6 +497,7 @@ def test_mapa_e_detalhe_do_lote(cliente, como, db):
         ("post", "/api/lotes/{id}/importar", {"files": [("arquivos", ("1-a.pdf", PDF, "application/pdf"))]}),
         ("post", "/api/lotes/{id}/importar-certificado-mp", {}),
         ("post", "/api/anexos/{anexo}/remover", {"json": {"motivo": "teste"}}),
+        ("put", "/api/lotes/{id}/etapas/receb_mp/anexos/ordem", {"json": {"ids": [1]}}),
         ("patch", "/api/lotes/{id}", {"json": {"op": "1", "numero": "2", "tipo": "PIN", "qtd": 1}}),
         ("post", "/api/lotes/{id}/cancelar", {"json": {}}),
         ("post", "/api/lotes", {"json": {"op": "1", "numero": "2", "tipo": "PIN", "qtd": 1}}),
@@ -500,6 +512,59 @@ def test_quem_nao_trabalha_no_lote_nao_grava(cliente, como, db, metodo, caminho,
     resposta = getattr(so_cadastros, metodo)(caminho.format(id=lote.id, anexo=anexo.id), headers=_h(csrf), **extra)
     assert resposta.status_code == 403, resposta.text
     assert so_cadastros.get(f"/api/lotes/{lote.id}/etapas/receb_mp").status_code == 200  # ver continua liberado
+
+
+def test_ordem_dos_documentos_da_etapa_vale_na_tela_e_no_databook(como, db):
+    from app.api_databooks import secoes_do_lote
+
+    lote = _lote(db, etapa="trat_termico")
+    usuario, csrf = como(modulos=["qualidade"])
+    for nome in ("b-curva.pdf", "a-relatorio.pdf", "c-grafico.pdf"):
+        assert _anexar(usuario, csrf, lote.id, "trat_termico", nome).status_code == 201
+    tela = f"/api/lotes/{lote.id}/etapas/trat_termico"
+    assert [a["nome"] for a in usuario.get(tela).json()["anexos"]] == ["a-relatorio.pdf", "b-curva.pdf", "c-grafico.pdf"]
+
+    ids = {a["nome"]: a["id"] for a in usuario.get(tela).json()["anexos"]}
+    nova = [ids["c-grafico.pdf"], ids["a-relatorio.pdf"], ids["b-curva.pdf"]]
+    assert usuario.put(f"{tela}/anexos/ordem", json={"ids": nova[:2]}, headers=_h(csrf)).status_code == 409  # faltou um
+    assert usuario.put(f"{tela}/anexos/ordem", json={"ids": nova}, headers=_h(csrf)).status_code == 200
+    assert _anexar(usuario, csrf, lote.id, "trat_termico", "0-novo.pdf").status_code == 201  # enviado depois: vai para o fim
+    esperado = ["c-grafico.pdf", "a-relatorio.pdf", "b-curva.pdf", "0-novo.pdf"]
+    assert [a["nome"] for a in usuario.get(tela).json()["anexos"]] == esperado
+    tt = next(e for e in usuario.get(f"/api/lotes/{lote.id}").json()["etapas"] if e["chave"] == "trat_termico")
+    assert [a["nome"] for a in tt["anexos"]] == esperado
+
+    db.expire_all()
+    secoes, _ = secoes_do_lote(db, db.get(Lote, lote.id))
+    assert [d.nome for s in secoes for d in s.documentos] == esperado
+    assert db.scalar(select(Auditoria).where(Auditoria.acao == "ORDENAR", Auditoria.lote_id == lote.id)) is not None
+
+
+def test_ark_faz_dureza_e_usinagem_opcionais_sem_travar_o_lote(como, db):
+    from app.api_databooks import secoes_do_lote
+
+    lote = _lote(db, etapa="receb_mp", tipo="ARK")
+    usuario, csrf = como(modulos=["qualidade"])
+    tela = usuario.get(f"/api/lotes/{lote.id}/etapas/usinagem").json()["etapa"]
+    assert tela["aplicavel"] and tela["opcional"] and tela["liberada"] and tela["situacao"] == "opcional"
+
+    r = usuario.post(f"/api/lotes/{lote.id}/etapas/usinagem/aprovar-por-anexo", json={}, headers=_h(csrf))
+    assert r.status_code == 200, r.text  # concluída sem documento
+    assert _anexar(usuario, csrf, lote.id, "dureza", "rip-35-ark.pdf").status_code == 201
+    db.expire_all()
+    assert db.get(Lote, lote.id).etapa == 0  # o lote continua onde estava
+
+    etapas = {e["chave"]: e for e in usuario.get(f"/api/lotes/{lote.id}").json()["etapas"]}
+    assert etapas["usinagem"]["situacao"] == "aprovada" and etapas["usinagem"]["opcional"]
+    assert etapas["dureza"]["situacao"] == "opcional" and etapas["dureza"]["n_documentos"] == 1
+    assert etapas["tambor"]["situacao"] == "nao_aplicavel" and not etapas["tambor"]["aplicavel"]
+    mapa = usuario.get(f"/api/lotes/{lote.id}/mapa").json()
+    nomes = [linha["nome"] for linha in mapa["linhas"]]
+    assert "Usinagem (opcional)" in nomes and "Dureza HRC (opcional)" in nomes and mapa["total_etapas"] == 8
+
+    secoes, checklist = secoes_do_lote(db, db.get(Lote, lote.id))
+    assert [d.nome for s in secoes if s.titulo == "Relatorio Dureza HRC" for d in s.documentos] == ["rip-35-ark.pdf"]
+    assert "dureza" not in checklist  # opcional: não cobra documento
 
 
 def test_sem_login_nao_ve_a_etapa(cliente, db):

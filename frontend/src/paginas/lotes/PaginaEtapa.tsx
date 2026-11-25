@@ -31,7 +31,7 @@ function RelatorioDoSistema({ dados }: { dados: PaginaEtapaDados }) {
   const { pode } = useSessao();
   const id = dados.lote.id;
   let atalho: { para: string; titulo: string; texto: string } | null = null;
-  if (dados.etapa.chave === 'dureza' && pode.qualidade && dados.lote.tipo !== 'ARK') {
+  if (dados.etapa.chave === 'dureza' && pode.qualidade) {
     atalho = { para: `/relatorios/dureza?lote=${id}`, titulo: 'Gerar RIP-35 direto no sistema', texto: 'Formulário com cálculo automático do status pela especificação, já com a imagem dos pontos de medição do tipo da peça.' };
   } else if (dados.etapa.chave === 'trat_termico' && pode.tt) {
     atalho = { para: `/relatorios/tt?lote=${id}`, titulo: 'Gerar relatório de TT direto no sistema', texto: 'Permite incluir mais de uma OP no mesmo tratamento (quando o forno trata lotes juntos), com os gráficos do forno.' };
@@ -130,18 +130,54 @@ function ListaAnexos({
   dados,
   podeRegistrar,
   aoRemover,
+  aoOrdenar,
+  ordenando = false,
 }: {
   anexos: AnexoEtapa[];
   dados: PaginaEtapaDados;
   podeRegistrar: boolean;
   aoRemover: (anexo: AnexoEtapa) => void;
+  aoOrdenar?: (ids: number[]) => void;
+  ordenando?: boolean;
 }) {
   const { pode } = useSessao();
   const nomeSub = (sub: string) => dados.etapa.subs.find((s) => s.sub === sub)?.nome ?? '';
+  const podeOrdenar = podeRegistrar && aoOrdenar !== undefined && anexos.length > 1;
+
+  function mover(indice: number, passo: -1 | 1) {
+    const ids = anexos.map((a) => a.id);
+    [ids[indice], ids[indice + passo]] = [ids[indice + passo], ids[indice]];
+    aoOrdenar?.(ids);
+  }
+
   return (
-    <ul className="lt-lista">
-      {anexos.map((a) => (
+    <ol className={`lt-lista ${podeOrdenar ? 'lt-lista-ordenavel' : ''}`}>
+      {anexos.map((a, indice) => (
         <li key={a.id}>
+          {podeOrdenar && (
+            <span className="lt-ordem">
+              <button
+                type="button"
+                className="botao botao-pequeno"
+                onClick={() => mover(indice, -1)}
+                disabled={ordenando || indice === 0}
+                aria-label={`Subir ${a.nome}`}
+                title="Subir"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="botao botao-pequeno"
+                onClick={() => mover(indice, 1)}
+                disabled={ordenando || indice === anexos.length - 1}
+                aria-label={`Descer ${a.nome}`}
+                title="Descer"
+              >
+                ↓
+              </button>
+            </span>
+          )}
           <a href={enderecoApi(`/anexos/${a.id}/arquivo`)} target="_blank" rel="noopener" className="link-forte">
             {a.nome}
             <span className="so-leitor"> (abre em outra aba)</span>
@@ -160,7 +196,7 @@ function ListaAnexos({
           )}
         </li>
       ))}
-    </ul>
+    </ol>
   );
 }
 
@@ -188,6 +224,18 @@ function Documentos({ dados, aoMudar }: { dados: PaginaEtapaDados; aoMudar: () =
       avisos.sucesso(`${r.salvos.length} arquivo(s) anexado(s).`);
       if (r.ignorados.length) avisos.erro(`Não anexado(s): ${r.ignorados.join(' ')}`);
       setArquivos([]);
+      aoMudar();
+    } catch (e) {
+      avisos.erro(mensagemDeErro(e));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function ordenar(ids: number[]) {
+    setEnviando(true);
+    try {
+      await api(`/lotes/${lote.id}/etapas/${etapa.chave}/anexos/ordem`, { metodo: 'PUT', corpo: { ids } });
       aoMudar();
     } catch (e) {
       avisos.erro(mensagemDeErro(e));
@@ -230,7 +278,12 @@ function Documentos({ dados, aoMudar }: { dados: PaginaEtapaDados; aoMudar: () =
     <section className="cartao" aria-labelledby="titulo-documentos">
       <h2 id="titulo-documentos">Arquivos anexados à etapa (entram no databook)</h2>
       {temDocumento ? (
-        <ListaAnexos anexos={dados.anexos} dados={dados} podeRegistrar={podeRegistrar} aoRemover={setRemover} />
+        <>
+          {podeRegistrar && dados.anexos.length > 1 && (
+            <p className="dica">Os arquivos entram no databook nesta ordem. Use ↑ e ↓ para mudar.</p>
+          )}
+          <ListaAnexos anexos={dados.anexos} dados={dados} podeRegistrar={podeRegistrar} aoRemover={setRemover} aoOrdenar={(ids) => void ordenar(ids)} ordenando={enviando} />
+        </>
       ) : (
         <p className="dica">Nenhum anexo nesta etapa{etapa.exige_anexo && ' (é obrigatório anexar para aprovar)'}.</p>
       )}
@@ -476,6 +529,12 @@ export function PaginaEtapa() {
                     </Link>
                   ))}
                 </nav>
+              )}
+              {dados.etapa.opcional && (
+                <Faixa tipo="info">
+                  <strong>Etapa opcional para lotes {dados.lote.tipo}.</strong> Dá para registrar, gerar o relatório, anexar documentos ou
+                  concluir sem documento. O que for anexado entra no databook, mas o lote não depende desta etapa para avançar.
+                </Faixa>
               )}
               {!podeRegistrar && <Faixa tipo="info">Seu usuário só consulta: registrar, anexar e aprovar ficam com Qualidade, PCP e Produção.</Faixa>}
               <RelatorioDoSistema dados={dados} />

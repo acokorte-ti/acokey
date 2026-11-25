@@ -18,12 +18,12 @@ from sqlalchemy.orm import Session
 
 from app import ciclo_lote, fluxo
 from app.api_recursos import listar_desenhos
-from app.arquivos import resposta_arquivo
+from app.arquivos import em_ordem_do_databook, resposta_arquivo
 from app.config import agora_local
 from app.db import get_db
 from app.estado import estado_lotes, lotes_com_nc_aberta
 from app.historico import registrar_evento
-from app.lotes import buscar_lote, criar_lote, numero_em_uso
+from app.lotes import buscar_lote, criar_lote, numero_em_uso, op_do_cadastro
 from app.models import TIPOS_LOTE, Anexo, Evento, Lote, NaoConformidade, OrdemProducao
 from app.seguranca import QUALQUER, Contexto, auditar, diferencas, exigir, limpar_texto
 
@@ -153,7 +153,8 @@ def ver_lote(lote_id: int, _: Contexto = Depends(QUALQUER), db: Session = Depend
     indice_real = fluxo.etapa_real(lote.tipo, estado)
 
     anexos_por_etapa: dict[str, list[dict]] = {}
-    for a in db.scalars(select(Anexo).where(Anexo.lote_id == lote_id, Anexo.removido_em.is_(None)).order_by(Anexo.id)):
+    todos = db.scalars(select(Anexo).where(Anexo.lote_id == lote_id, Anexo.removido_em.is_(None)).order_by(Anexo.id))
+    for a in em_ordem_do_databook(todos):  # cada etapa na ordem em que os documentos entram no databook
         anexos_por_etapa.setdefault(a.etapa, []).append(
             {"id": a.id, "sub": a.sub, "nome": a.nome, "quando": a.quando, "apenas_registro": a.apenas_registro}
         )
@@ -165,7 +166,7 @@ def ver_lote(lote_id: int, _: Contexto = Depends(QUALQUER), db: Session = Depend
 
     etapas = []
     for indice, e in enumerate(fluxo.ETAPAS):
-        aplicavel = e.aplicavel(lote.tipo)
+        aplicavel = e.abrivel(lote.tipo)  # a opcional também abre (ex.: dureza no ARK)
         subs = []
         pendente = None
         for s in e.subs_de(lote.tipo) if aplicavel else ():
@@ -189,6 +190,7 @@ def ver_lote(lote_id: int, _: Contexto = Depends(QUALQUER), db: Session = Depend
                 "curto": e.curto_de(lote.tipo),
                 "setor": e.setor,
                 "aplicavel": aplicavel,
+                "opcional": e.opcional(lote.tipo),
                 "situacao": fluxo.situacao_etapa(indice, lote.tipo, estado, indice_real),
                 "subs": subs,
                 "anexos": anexos,
@@ -255,6 +257,8 @@ def editar_lote(lote_id: int, corpo: CorpoEditarLote, ctx: Contexto = Depends(NO
     mudancas = diferencas(antes, depois)
     if not mudancas:
         return {"ok": True, "mudou": False}
+    if "op" in mudancas:
+        op_do_cadastro(db, op)
     motivo = _exigir_autorizacao(db, ctx, lote, corpo.motivo, "editar")
     if numero_em_uso(db, numero, exceto_id=lote.id):
         raise HTTPException(409, f"Já existe outro lote com o número '{numero}'.")

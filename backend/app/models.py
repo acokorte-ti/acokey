@@ -347,6 +347,8 @@ class Anexo(Base):
     quando: Mapped[datetime | None] = mapped_column(DateTime)
     # Evidência só interna (ex.: fotos): não entra no databook do cliente
     apenas_registro: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # Posição escolhida na etapa (1, 2, 3...). Vazia: ordem alfabética do nome. Ver arquivos.em_ordem_do_databook
+    ordem: Mapped[int | None] = mapped_column(Integer)
     # Nada é apagado: anexo removido some da etapa e do databook, mas o arquivo e o registro ficam
     removido_em: Mapped[datetime | None] = mapped_column(DateTime)
     removido_por: Mapped[str] = mapped_column(String(120), default="", server_default="")

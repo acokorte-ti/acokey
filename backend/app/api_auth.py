@@ -140,6 +140,7 @@ class UsuarioNovo(BaseModel):
 
 
 class UsuarioAlteracao(BaseModel):
+    login: str | None = Field(None, min_length=3, max_length=60, pattern=r"^[a-zA-Z0-9._-]+$")
     nome: str | None = Field(None, min_length=2, max_length=120)
     cargo: str | None = Field(None, max_length=80)
     ativo: bool | None = None
@@ -164,7 +165,10 @@ def _aplicar_modulos(usuario: Usuario, modulos: list[str]) -> None:
 
 
 def _permissoes(u: Usuario) -> dict:
-    return {"nome": u.nome, "cargo": u.cargo, "ativo": u.ativo, "admin": u.admin, "modulos": u.modulos, "pode_aprovar": u.pode_aprovar}
+    return {
+        "login": u.login, "nome": u.nome, "cargo": u.cargo, "ativo": u.ativo, "admin": u.admin, "modulos": u.modulos,
+        "pode_aprovar": u.pode_aprovar,
+    }  # fmt: skip
 
 
 @rota.get("/usuarios")
@@ -211,6 +215,12 @@ def alterar_usuario(
     antes = _permissoes(usuario)
     depois = {**antes, **dados.model_dump(exclude_none=True)}
     _validar_modulos(depois["modulos"])
+    # Trocar o login não mexe no histórico: auditoria e registros antigos guardam o login/nome da época
+    depois["login"] = depois["login"].strip().lower()
+    if depois["login"] != usuario.login and db.scalar(
+        select(Usuario.id).where(func.lower(Usuario.login) == depois["login"], Usuario.id != usuario.id)
+    ):
+        raise HTTPException(409, f"O login {depois['login']} já está em uso.")
 
     if usuario.id == ctx.usuario.id and not depois["ativo"]:
         raise HTTPException(422, "Você não pode desativar o seu próprio usuário.")
@@ -223,7 +233,7 @@ def alterar_usuario(
             422, "Este é o único usuário ativo que pode aprovar: dê essa permissão a outra pessoa antes."
         )
 
-    usuario.nome, usuario.cargo = depois["nome"].strip(), depois["cargo"].strip()
+    usuario.login, usuario.nome, usuario.cargo = depois["login"], depois["nome"].strip(), depois["cargo"].strip()
     usuario.ativo, usuario.admin, usuario.pode_aprovar = depois["ativo"], depois["admin"], depois["pode_aprovar"]
     _aplicar_modulos(usuario, depois["modulos"])
     mudou = diferencas(antes, _permissoes(usuario))

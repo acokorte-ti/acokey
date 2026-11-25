@@ -33,7 +33,7 @@ interface Acesso {
 }
 
 type EdicaoNovo = { tipo: 'novo'; login: string; nome: string; senha: string } & Acesso;
-type EdicaoAlterar = { tipo: 'alterar'; usuario: Usuario; nome: string; ativo: boolean } & Acesso;
+type EdicaoAlterar = { tipo: 'alterar'; usuario: Usuario; login: string; nome: string; ativo: boolean } & Acesso;
 type EdicaoSenha = { tipo: 'senha'; usuario: Usuario; senha: string };
 type Edicao = EdicaoNovo | EdicaoAlterar | EdicaoSenha;
 
@@ -44,9 +44,11 @@ function mesmosModulos(a: readonly Modulo[], b: readonly Modulo[]): boolean {
 /** Só o que foi mexido no formulário vai para o servidor (e para a auditoria). */
 function mudancas(edicao: EdicaoAlterar): UsuarioAlteracao {
   const antes = edicao.usuario;
+  const login = edicao.login.trim().toLowerCase();
   const nome = edicao.nome.trim();
   const cargo = edicao.cargo.trim();
   const corpo: UsuarioAlteracao = {};
+  if (login !== antes.login) corpo.login = login;
   if (nome !== antes.nome) corpo.nome = nome;
   if (cargo !== antes.cargo) corpo.cargo = cargo;
   if (edicao.ativo !== antes.ativo) corpo.ativo = edicao.ativo;
@@ -238,6 +240,7 @@ export function Usuarios() {
                 abrir({
                   tipo: 'alterar',
                   usuario: u,
+                  login: u.login,
                   nome: u.nome,
                   ativo: u.ativo,
                   cargo: u.cargo,
@@ -289,7 +292,7 @@ export function Usuarios() {
           return;
         }
         const alterado = await api<Usuario>(`/usuarios/${edicao.usuario.id}`, { metodo: 'PATCH', corpo });
-        avisos.sucesso('Usuário alterado.');
+        avisos.sucesso(corpo.login ? `Usuário alterado. O login agora é ${alterado.login}: avise a pessoa.` : 'Usuário alterado.');
         // Mexeu no próprio cadastro: o topo e o menu acompanham na hora
         if (alterado.id === eu.id) atualizarUsuario(alterado);
       } else {
@@ -395,7 +398,12 @@ export function Usuarios() {
           enviando={enviando}
           erro={erro}
         >
-          <Campo rotulo="Nome completo" para="usuario-nome" obrigatorio>
+          <Campo
+            rotulo="Nome completo"
+            para="usuario-nome"
+            obrigatorio
+            dica="É o nome que aparece no sistema, nos registros e nos relatórios. Os registros já gravados continuam com o nome da época."
+          >
             <input
               id="usuario-nome"
               type="text"
@@ -405,6 +413,27 @@ export function Usuarios() {
               autoFocus
               value={edicao.nome}
               onChange={(e) => setEdicao({ ...edicao, nome: e.target.value })}
+            />
+          </Campo>
+          <Campo
+            rotulo="Usuário (login)"
+            para="usuario-login-editar"
+            obrigatorio
+            dica="É o que a pessoa digita para entrar. Letras, números, ponto, hífen ou sublinhado. Se mudar, avise a pessoa: a senha continua a mesma."
+          >
+            <input
+              id="usuario-login-editar"
+              type="text"
+              className="mono"
+              required
+              minLength={3}
+              maxLength={60}
+              pattern="[a-zA-Z0-9._\-]+"
+              autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              value={edicao.login}
+              onChange={(e) => setEdicao({ ...edicao, login: e.target.value.toLowerCase() })}
             />
           </Campo>
           <CamposAcesso valor={edicao} aoMudar={(mudanca) => setEdicao({ ...edicao, ...mudanca })} />

@@ -26,6 +26,18 @@ def numero_em_uso(db: Session, numero: str, exceto_id: int | None = None) -> boo
     return db.scalar(consulta) is not None
 
 
+def op_do_cadastro(db: Session, op: str) -> OrdemProducao:
+    """A OP do lote precisa existir no cadastro de OPs (com o Mega ligado, as OPs abertas entram sozinhas)."""
+    cadastro = db.scalar(select(OrdemProducao).where(OrdemProducao.op == op))
+    if not cadastro:
+        raise HTTPException(
+            422,
+            f"A OP {op} não existe no cadastro de OPs. Confira o número digitado ou cadastre a OP em "
+            "Cadastros › Ordens de produção.",
+        )
+    return cadastro
+
+
 def criar_lote(
     db: Session,
     ctx: Contexto,
@@ -50,9 +62,8 @@ def criar_lote(
         raise HTTPException(422, "Informe uma quantidade de peças maior que zero.")
     if numero_em_uso(db, numero):
         raise HTTPException(409, f"O lote {numero} já existe.")
-    if not coditem:
-        cadastro = db.scalar(select(OrdemProducao).where(OrdemProducao.op == op))
-        coditem = cadastro.coditem if cadastro else ""
+    cadastro = op_do_cadastro(db, op)
+    coditem = coditem or cadastro.coditem or ""
     agora = agora_local()
     lote = Lote(
         op=op, numero=numero, tipo=tipo, qtd=qtd, coditem=coditem, corrida=corrida,

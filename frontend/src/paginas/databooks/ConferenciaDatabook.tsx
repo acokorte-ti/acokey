@@ -88,6 +88,13 @@ export function ConferenciaDatabookTela() {
             </p>
           </section>
 
+          {!dados.op_cadastrada && (
+            <Faixa tipo="erro" papel="alert">
+              <strong>A OP {dados.lote.op} não existe no cadastro de OPs.</strong> Confira se o número da OP do lote está certo: corrija o lote
+              (Editar lote) ou cadastre a OP em Cadastros › Ordens de produção, e gere o databook de novo.
+            </Faixa>
+          )}
+
           {!r.ok ? (
             <Faixa tipo="erro" papel="alert">
               {r.erro}

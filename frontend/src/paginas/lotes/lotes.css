@@ -86,6 +86,17 @@
   overflow-wrap: anywhere;
 }
 
+/* Subir / descer um documento na ordem do databook */
+.lt-ordem {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.lt-ordem .botao {
+  min-width: 30px;
+  justify-content: center;
+}
+
 .lt-anulado > span:not(.selo) {
   color: var(--tinta-3);
   text-decoration: line-through;

@@ -3,7 +3,7 @@ import io
 import os
 import time
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 import pymupdf
 import pytest
@@ -58,6 +58,12 @@ def _concluir(db, lote):
             for sub in etapa.subs_de(lote.tipo):
                 db.add(Registro(lote_id=lote.id, etapa=etapa.chave, sub=sub, status="aprovado",
                                 quando=datetime(2026, 11, 21, 9, 0), responsavel="Fulano"))  # fmt: skip
+    db.commit()
+
+
+def _op(db, op="900001", tipo="PIN") -> None:
+    """A OP fictícia no cadastro: sem ela o databook não é gerado."""
+    db.add(OrdemProducao(op=op, cliente="CLIENTE EXEMPLO", tipo=tipo))
     db.commit()
 
 
@@ -174,6 +180,7 @@ def test_ark_sem_tracao_dureza_e_com_oxidacao_negra(como, db, pasta_arquivos):
     (pasta_arquivos / "recursos/desenhos").mkdir(parents=True)
     (pasta_arquivos / "recursos/desenhos/ORIGEM - 55555 ARK 18-24 EXEMPLO.pdf").write_bytes(_pdf("DESENHO"))
     lote = lote_exemplo(db, numero="26-4-900003", op="900003", tipo="ARK", coditem="55555")
+    _op(db, "900003", "ARK")
     _anexar(db, pasta_arquivos, lote, "receb_mp", "Certificado.pdf", _pdf("MP"))
     _anexar(db, pasta_arquivos, lote, "lab_ext", "Charpy.pdf", _pdf("CHARPY ARK"))
     _anexar(db, pasta_arquivos, lote, "fosfato", "Oxidacao.pdf", _pdf("OXIDACAO"))
@@ -197,6 +204,7 @@ def test_ark_sem_tracao_dureza_e_com_oxidacao_negra(como, db, pasta_arquivos):
 
 def test_alertas_de_checklist_e_arquivo_com_problema(como, db, pasta_arquivos):
     lote = lote_exemplo(db)
+    _op(db)
     _anexar(db, pasta_arquivos, lote, "receb_mp", "Certificado.pdf", _pdf("MP"))
     _anexar(db, pasta_arquivos, lote, "trat_termico", "Corrompido.pdf", b"%PDF-1.4 isto nao e um pdf")
     sumido = _anexar(db, pasta_arquivos, lote, "lp", "Sumiu.pdf", _pdf("LP"))
@@ -225,6 +233,10 @@ def test_bloqueios_da_geracao(como, db, pasta_arquivos):
     r = _gerar(qualidade, csrf, lote.id, aprovador.id)
     assert r.status_code == 409 and "todas as etapas" in r.json()["detail"]
     _concluir(db, lote)
+    r = _gerar(qualidade, csrf, lote.id, aprovador.id)
+    assert r.status_code == 422 and "OP 900001 deste lote não existe no cadastro" in r.json()["detail"]  # OP digitada errada
+    assert not (pasta_arquivos / f"lotes/{lote.id}/databook").exists()
+    _op(db)
     r = _gerar(qualidade, csrf, lote.id, aprovador.id, data=None)
     assert r.status_code == 422 and "DATA DE APROVAÇÃO" in r.json()["detail"]
     r = _gerar(qualidade, csrf, lote.id, sem_poder.id)
@@ -233,6 +245,7 @@ def test_bloqueios_da_geracao(como, db, pasta_arquivos):
     assert qualidade.get(f"/api/databooks/lote/{lote.id}/conferencia").status_code == 404
 
     vazio = lote_exemplo(db, numero="26-4-900009", op="900009")
+    _op(db, "900009")
     _concluir(db, vazio)
     r = _gerar(qualidade, csrf, vazio.id, aprovador.id)
     assert r.status_code == 422 and "Nenhum documento" in r.json()["detail"]
@@ -386,6 +399,37 @@ def test_a_enviar_mostra_so_a_revisao_mais_recente_de_cada_lote(como, db, pasta_
     # databook de lote cancelado não vai para o cliente
     lote_exemplo(db, numero="26-4-900001A", cancelado_em=datetime(2026, 11, 22, 8, 0), cancelado_motivo="Teste")
     assert qualidade.get("/api/databooks").json()["a_enviar"] == []
+
+
+def test_aba_todos_lista_todas_as_revisoes_e_baixa(como, db, pasta_arquivos):
+    pasta = pasta_arquivos / "databooks/LOTE-OP900001-PIN"
+    pasta.mkdir(parents=True)
+    rev1 = "Databook_DB-26-4-900001-PIN_Rev1.pdf"
+    for nome in (ARQ_PIN, rev1, "outro.pdf"):
+        (pasta / nome).write_bytes(_pdf("X"))
+    antigo = "Databook_DB-26-4-900002-BOX_Rev0.pdf"  # enviado pelo sistema antigo: só existe na pasta Enviados
+    (pasta_arquivos / "databooks/Enviados").mkdir()
+    (pasta_arquivos / f"databooks/Enviados/{antigo}").write_bytes(_pdf("ANTIGO"))
+    lote = lote_exemplo(db)
+    db.add(DatabookEnviado(op="900002", tipo="BOX", lote="26-4-900002", revisao=0, arquivo=antigo, data_envio=date(2026, 11, 20),
+                           caminho=f"databooks/Enviados/{antigo}", destinatario="Fulano"))  # fmt: skip
+    db.commit()
+    qualidade, _csrf = como(modulos=["qualidade"])
+
+    itens = {i["arquivo"]: i for i in qualidade.get("/api/databooks/todos").json()["itens"]}
+    assert set(itens) == {ARQ_PIN, rev1, antigo}  # "outro.pdf" não é databook
+    assert itens[rev1]["ultima"] and not itens[ARQ_PIN]["ultima"] and itens[ARQ_PIN]["lote_id"] == lote.id
+    assert itens[antigo]["envio_id"] and itens[antigo]["enviado_em"] == "2026-11-20" and itens[antigo]["lote_id"] is None
+
+    r = qualidade.get("/api/databooks/arquivo", params={"op": "900001", "tipo": "PIN", "arquivo": rev1, "baixar": "true"})
+    assert r.status_code == 200 and r.headers["content-disposition"].startswith("attachment")
+    r = qualidade.get(f"/api/databooks/envios/{itens[antigo]['envio_id']}/arquivo", params={"baixar": "true"})
+    assert r.status_code == 200 and r.headers["content-disposition"].startswith("attachment")
+    r = qualidade.get("/api/databooks/arquivo", params={"op": "900001", "tipo": "PIN", "arquivo": rev1})
+    assert r.headers["content-disposition"].startswith("inline")  # "Abrir PDF" continua abrindo no navegador
+
+    so_pcp, _csrf = como(modulos=["pcp"], login="pcp")
+    assert so_pcp.get("/api/databooks/todos").status_code == 403
 
 
 def test_nomes_de_arquivo_invalidos(como):

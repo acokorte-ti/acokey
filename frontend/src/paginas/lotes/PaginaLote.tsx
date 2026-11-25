@@ -190,7 +190,9 @@ function ItemEtapa({ etapa, passo, loteId }: { etapa: EtapaDoLoteCompleta; passo
   const nomeDaSub = (sub: string) => etapa.subs.find((s) => s.sub === sub)?.nome ?? sub;
   // Etapa que ainda vai acontecer e não tem nada lançado: só o título
   const mostrarRegistros =
-    etapa.aplicavel && etapa.subs.length > 0 && (etapa.situacao !== 'futura' || etapa.subs.some((s) => s.registro !== null));
+    etapa.aplicavel &&
+    etapa.subs.length > 0 &&
+    ((etapa.situacao !== 'futura' && etapa.situacao !== 'opcional') || etapa.subs.some((s) => s.registro !== null));
   const anexos = etapa.anexos;
   const temCorpo = mostrarRegistros || anexos.length > 0 || etapa.nc_pendente !== null;
 
@@ -681,7 +683,8 @@ export function PaginaLote() {
   );
   // Ao trocar de lote, os dados do anterior ficam na memória até o novo chegar: não mostra um lote no endereço de outro
   const dados = carga.dados && carga.dados.lote.id === Number(id) ? carga.dados : null;
-  const aplicaveis = dados ? dados.etapas.filter((e) => e.aplicavel) : [];
+  // A etapa opcional (ex.: dureza no ARK) não entra na numeração: o lote não depende dela
+  const aplicaveis = dados ? dados.etapas.filter((e) => e.aplicavel && !e.opcional) : [];
 
   return (
     <>
@@ -712,7 +715,7 @@ export function PaginaLote() {
             <p className="dica">Clique numa etapa para registrar, anexar documentos ou aprovar.</p>
             <ol className="etapas">
               {dados.etapas.map((etapa) => (
-                <ItemEtapa key={etapa.chave} etapa={etapa} loteId={dados.lote.id} passo={etapa.aplicavel ? aplicaveis.indexOf(etapa) + 1 : 0} />
+                <ItemEtapa key={etapa.chave} etapa={etapa} loteId={dados.lote.id} passo={aplicaveis.indexOf(etapa) + 1} />
               ))}
             </ol>
             <ConcluirEtapaAtual dados={dados} aoMudar={carga.recarregar} />

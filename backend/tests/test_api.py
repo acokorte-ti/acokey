@@ -119,6 +119,32 @@ def test_regras_de_alteracao_de_usuario(cliente):
     assert "ALTERAR" in acoes and "CRIAR" in acoes
 
 
+def test_administrador_troca_o_login_e_o_nome_do_usuario(cliente, db):
+    from fastapi.testclient import TestClient
+    from sqlalchemy import select
+
+    from app.main import app
+    from app.models import Auditoria
+
+    csrf = admin_pronto(cliente)
+    maria = _criar_usuario(cliente, csrf)
+    _criar_usuario(cliente, csrf, login="joao.souza", nome="Joao Souza")
+    cab = {"X-CSRF-Token": csrf}
+    assert cliente.patch(f"/api/usuarios/{maria['id']}", json={"login": "Joao.Souza"}, headers=cab).status_code == 409
+    assert cliente.patch(f"/api/usuarios/{maria['id']}", json={"login": "maria silva"}, headers=cab).status_code == 422
+
+    r = cliente.patch(f"/api/usuarios/{maria['id']}", json={"login": "Maria.Souza", "nome": "Maria Souza"}, headers=cab)
+    assert r.status_code == 200, r.text
+    assert (r.json()["login"], r.json()["nome"]) == ("maria.souza", "Maria Souza")
+    with TestClient(app) as outra:
+        assert outra.post("/api/auth/login", json={"login": "maria.silva", "senha": "Provisoria-2026"}).status_code == 401
+        entrar(outra, "maria.souza", "Provisoria-2026")  # a senha continua a mesma
+        assert outra.patch(f"/api/usuarios/{maria['id']}", json={"login": "outra"}).status_code in (401, 403)
+
+    alteracoes = db.scalars(select(Auditoria).where(Auditoria.acao == "ALTERAR", Auditoria.entidade_id == str(maria["id"])))
+    assert any((a.detalhes or {}).get("login") == ["maria.silva", "maria.souza"] for a in alteracoes)
+
+
 def test_mudar_permissao_derruba_a_sessao_da_pessoa(cliente):
     from fastapi.testclient import TestClient
 
@@ -167,7 +193,8 @@ def test_lista_e_detalhe_dos_lotes(cliente, db):
     detalhe_ark = cliente.get(f"/api/lotes/{ark.id}").json()
     lab = next(e for e in detalhe_ark["etapas"] if e["chave"] == "lab_ext")
     assert [s["sub"] for s in lab["subs"]] == ["charpy"] and lab["situacao"] == "atual"
-    assert next(e for e in detalhe_ark["etapas"] if e["chave"] == "dureza")["situacao"] == "nao_aplicavel"
+    assert next(e for e in detalhe_ark["etapas"] if e["chave"] == "dureza")["situacao"] == "opcional"  # não trava o ARK
+    assert next(e for e in detalhe_ark["etapas"] if e["chave"] == "tambor")["situacao"] == "nao_aplicavel"
     assert cliente.get("/api/lotes/9999").status_code == 404
 
 

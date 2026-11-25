@@ -50,7 +50,8 @@ Padrão de referência dos sistemas internos: `..\manut-mtbf-mttr\` (mais comple
   está e anulada liberam. "Uso como está" e "anulada" exigem quem **pode aprovar** e justificativa escrita.
 - Registro anulado é invisível para o fluxo. Registros antigos podem ter `dados` em formato diferente
   (ex.: dureza antiga em `report.tabelas.linhas`, nova em `leituras`): ao reprocessar, tratar os dois.
-- PIN/BOX: SC 4330, 30–39 HRc. ARK: H11 Modified, 43–48 HRc, pula dureza, usinagem e tamboreamento, e no
+- PIN/BOX: SC 4330, 30–39 HRc. ARK: H11 Modified, 43–48 HRc, pula tamboreamento; dureza e usinagem são OPCIONAIS no ARK
+  (`opcional_para` em `fluxo.py`: aparecem, aceitam registro e anexo, mas não travam o lote), e no
   laboratório só faz Charpy.
 
 ## 4. Convenções

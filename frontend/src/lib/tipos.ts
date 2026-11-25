@@ -39,6 +39,7 @@ export interface UsuarioNovo {
 
 /** Corpo de PATCH /usuarios/{id}: só vai o que mudou. */
 export interface UsuarioAlteracao {
+  login?: string;
   nome?: string;
   cargo?: string;
   ativo?: boolean;
@@ -94,7 +95,7 @@ export interface ListaLotes {
   itens: LoteResumo[];
 }
 
-export type SituacaoEtapa = 'aprovada' | 'reprovada' | 'atual' | 'futura' | 'nao_aplicavel';
+export type SituacaoEtapa = 'aprovada' | 'reprovada' | 'atual' | 'futura' | 'opcional' | 'nao_aplicavel';
 export type StatusRegistro = 'aprovado' | 'reprovado' | 'pendente';
 export type StatusNc = 'aberta' | 'em_tratamento' | 'encerrada';
 
@@ -128,6 +129,8 @@ export interface EtapaDoLote {
   curto: string;
   setor: string;
   aplicavel: boolean;
+  /** Etapa que o tipo pode fazer sem travar o lote (ex.: dureza e usinagem no ARK). */
+  opcional?: boolean;
   situacao: SituacaoEtapa;
   subs: SubEtapa[];
   anexos: AnexoEtapa[];

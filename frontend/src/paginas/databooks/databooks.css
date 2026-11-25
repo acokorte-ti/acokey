@@ -219,3 +219,9 @@
 .db-linha-erro td {
   background: #fff7f6;
 }
+
+/* Aba "Todos": busca por OP, lote ou arquivo */
+.db-busca {
+  max-width: 360px;
+  margin: 12px 0;
+}

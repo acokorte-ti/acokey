@@ -42,6 +42,23 @@ export interface DatabookEnvio {
 }
 
 /** GET /databooks */
+/** Aba "Todos": um databook gerado (qualquer revisão), do sistema novo ou do antigo. */
+export interface DatabookGerado {
+  op: string;
+  tipo: TipoLote;
+  lote: string;
+  revisao: number | null;
+  arquivo: string;
+  tamanho_mb: number;
+  modificado: string;
+  lote_id: number | null;
+  lote_cancelado: boolean;
+  enviado_em: string | null;
+  /** Só para o enviado pelo sistema antigo, que tirou o PDF da pasta da OP: baixa pelo registro do envio. */
+  envio_id: number | null;
+  ultima: boolean;
+}
+
 export interface PainelDatabooks {
   a_enviar: DatabookAEnviar[];
   enviados: DatabookEnvio[];
@@ -128,6 +145,7 @@ export interface ConferenciaDatabook {
   arquivo: string;
   revisao: number | null;
   gerado_em: string;
+  op_cadastrada: boolean;
   resultado: {
     ok: boolean;
     erro: string | null;

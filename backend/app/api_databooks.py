@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 
 from app import fluxo, parametros
 from app.api_recursos import listar_desenhos
-from app.arquivos import DOCUMENTOS, caminho_seguro, nome_seguro, resposta_arquivo
+from app.arquivos import DOCUMENTOS, caminho_seguro, em_ordem_do_databook, nome_seguro, resposta_arquivo
 from app.conferencia_databook import conferir_databook
 from app.config import FUSO, agora_local, config
 from app.databook_pdf import Capa, Documento, Secao, SemDocumentos, limpar_titulo, montar
@@ -179,9 +179,11 @@ def proxima_revisao(lote: Lote) -> int:
 # ----------------------------------------------------------------- conteúdo do databook
 
 
-def _aplica(etapa: str, sub: str, tipo: str) -> bool:
+def _aplica(etapa: str, sub: str, tipo: str, *, opcional: bool = False) -> bool:
+    """Obrigatória para o tipo; com opcional=True, a etapa opcional (ex.: dureza no ARK)."""
     e = fluxo.POR_CHAVE[etapa]
-    return e.aplicavel(tipo) and (sub == "" or sub in e.subs_de(tipo))
+    vale = e.opcional(tipo) if opcional else e.aplicavel(tipo)
+    return vale and (sub == "" or sub in e.subs_de(tipo))
 
 
 def secoes_do_lote(db: Session, lote: Lote) -> tuple[list[Secao], list[str]]:
@@ -189,8 +191,9 @@ def secoes_do_lote(db: Session, lote: Lote) -> tuple[list[Secao], list[str]]:
 
     Regras do antigo: só os documentos originais anexados (foto "só registro interno" e anexo removido não entram);
     anexo da etapa sem subdivisão também entra na seção da subdivisão (laudo único de tração + Charpy); dentro da
-    seção, ordem alfabética do nome do arquivo e, com o mesmo nome, só o anexo mais recente (o antigo copiava todos
-    para a mesma pasta e o último substituía o anterior). Seção de etapa que não se aplica ao tipo fica de fora.
+    seção, a ordem escolhida na etapa ou, sem ela, a alfabética do nome do arquivo; com o mesmo nome, só o anexo mais
+    recente (o antigo copiava todos para a mesma pasta e o último substituía o anterior). Seção de etapa que não se
+    aplica ao tipo fica de fora.
     """
     anexos = list(db.scalars(
         select(Anexo)
@@ -201,21 +204,25 @@ def secoes_do_lote(db: Session, lote: Lote) -> tuple[list[Secao], list[str]]:
     checklist: list[str] = []
     for pasta, palavra, itens in SECOES_DB:
         aplicaveis = [(e, s) for e, s in itens if _aplica(e, s, lote.tipo)]
-        if not aplicaveis:
+        opcionais = [(e, s) for e, s in itens if _aplica(e, s, lote.tipo, opcional=True)]
+        if not aplicaveis and not opcionais:
             continue
         pasta, palavra = SECOES_POR_TIPO.get((lote.tipo, pasta), (pasta, palavra))
-        checklist.append(palavra)
-        por_nome: dict[str, Documento] = {}
-        for etapa, sub in aplicaveis:
-            for a in anexos:
+        if aplicaveis:  # seção só de etapa opcional entra se tiver documento, sem cobrar no checklist
+            checklist.append(palavra)
+        por_nome: dict[str, Anexo] = {}
+        for etapa, sub in aplicaveis + opcionais:
+            for a in anexos:  # em ordem de envio: com o mesmo nome, o mais recente fica
                 if a.etapa != etapa or a.sub not in (sub, ""):
                     continue
                 nome = nome_seguro(a.nome)
                 if Path(nome).suffix.lower() not in DOCUMENTOS or nome.startswith((".", "~")):
                     continue
-                por_nome[nome.lower()] = Documento(nome=nome, caminho=caminho_seguro(a.arquivo))
+                por_nome[nome.lower()] = a
         if por_nome:
-            secoes.append(Secao(limpar_titulo(pasta), [por_nome[k] for k in sorted(por_nome)]))
+            documentos = [Documento(nome=nome_seguro(a.nome), caminho=caminho_seguro(a.arquivo))
+                          for a in em_ordem_do_databook(por_nome.values(), nome_seguro)]  # fmt: skip
+            secoes.append(Secao(limpar_titulo(pasta), documentos))
     return secoes, checklist
 
 
@@ -375,6 +382,48 @@ def listar_a_enviar(db: Session) -> list[dict]:
     return saida
 
 
+def listar_todos(db: Session) -> list[dict]:
+    """Todos os databooks gerados (todas as revisões, de todos os lotes, do sistema novo e do antigo), para consultar e
+    baixar. Vêm das pastas das OPs; os que o sistema antigo tirou de lá ao marcar como enviado vêm do registro do envio."""
+    enviados = {e.arquivo: e for e in envios_ativos(db)}
+    lotes = {lote.numero.strip().lower(): lote for lote in db.scalars(select(Lote))}
+    itens: dict[str, dict] = {}
+
+    def incluir(op: str, tipo: str, numero: str, revisao: int | None, caminho: Path, envio_id: int | None = None) -> None:
+        lote = lotes.get(numero.strip().lower())
+        envio = enviados.get(caminho.name)
+        itens[caminho.name] = {
+            "op": op, "tipo": tipo, "lote": numero, "revisao": revisao, "arquivo": caminho.name,
+            "tamanho_mb": round(caminho.stat().st_size / 1024 / 1024, 1), "modificado": _quando(caminho),
+            "lote_id": lote.id if lote and not lote.cancelado_em else None,
+            "lote_cancelado": bool(lote and lote.cancelado_em),
+            "enviado_em": envio.data_envio if envio else None, "envio_id": envio_id,
+        }  # fmt: skip
+
+    base = _absoluto(PASTA_DEPOSITO)
+    for pasta in sorted(base.iterdir()) if base.is_dir() else []:
+        achado = RE_PASTA_OP.match(pasta.name)
+        if not achado or not pasta.is_dir():
+            continue
+        for arquivo in sorted(pasta.iterdir()):
+            achado_arq = RE_ARQUIVO.match(arquivo.name)
+            if achado_arq and arquivo.is_file() and arquivo.name not in itens:
+                incluir(achado.group(1), achado.group(2).upper(), achado_arq.group(1), int(achado_arq.group(3)), arquivo)
+    for envio in enviados.values():
+        caminho = caminho_seguro(envio.caminho) if envio.arquivo not in itens else None
+        if caminho:
+            incluir(envio.op, envio.tipo.upper(), envio.lote, envio.revisao, caminho, envio_id=envio.id)
+
+    # A revisão mais recente de cada lote é a que vale; as anteriores ficam só para consulta
+    ultima: dict[str, int] = {}
+    for item in itens.values():
+        chave = item["lote"].strip().lower()
+        ultima[chave] = max(ultima.get(chave, -1), item["revisao"] or 0)
+    for item in itens.values():
+        item["ultima"] = (item["revisao"] or 0) == ultima[item["lote"].strip().lower()]
+    return sorted(itens.values(), key=lambda d: d["modificado"], reverse=True)
+
+
 def _envio(e: DatabookEnviado, lotes: dict[str, int]) -> dict:
     return {
         "id": e.id, "op": e.op, "tipo": e.tipo, "lote": e.lote, "revisao": e.revisao, "arquivo": e.arquivo,
@@ -437,11 +486,17 @@ def _validar_nome(op: str, tipo: str, arquivo: str) -> tuple[str, str, str, re.M
     return op, tipo, arquivo, achado
 
 
+@rota.get("/databooks/todos")
+def todos_os_databooks(_: Contexto = Depends(QUALIDADE), db: Session = Depends(get_db)) -> dict:
+    """Aba "Todos": cada databook gerado, de todas as revisões, para abrir ou baixar."""
+    return {"itens": listar_todos(db)}
+
+
 @rota.get("/databooks/arquivo")
-def baixar_a_enviar(op: str, tipo: str, arquivo: str, _: Contexto = Depends(QUALIDADE)) -> FileResponse:
-    """PDF ainda na pasta da OP (aba "A enviar")."""
+def baixar_a_enviar(op: str, tipo: str, arquivo: str, baixar: bool = False, _: Contexto = Depends(QUALIDADE)) -> FileResponse:
+    """PDF na pasta da OP (abas "A enviar" e "Todos"). Com baixar=true, o navegador salva em vez de abrir."""
     op, tipo, arquivo, _achado = _validar_nome(op, tipo, arquivo)
-    return resposta_arquivo(f"{pasta_op(op, tipo)}/{arquivo}", arquivo)
+    return resposta_arquivo(f"{pasta_op(op, tipo)}/{arquivo}", arquivo, baixar=baixar)
 
 
 class EnvioEntrada(BaseModel):
@@ -531,11 +586,13 @@ def desfazer_envio(
 
 
 @rota.get("/databooks/envios/{envio_id}/arquivo")
-def baixar_enviado(envio_id: int, _: Contexto = Depends(QUALIDADE), db: Session = Depends(get_db)) -> FileResponse:
+def baixar_enviado(
+    envio_id: int, baixar: bool = False, _: Contexto = Depends(QUALIDADE), db: Session = Depends(get_db)
+) -> FileResponse:
     envio = db.get(DatabookEnviado, envio_id)
     if not envio:
         raise HTTPException(404, "Envio não encontrado.")
-    return resposta_arquivo(envio.caminho, envio.arquivo or "databook.pdf")
+    return resposta_arquivo(envio.caminho, envio.arquivo or "databook.pdf", baixar=baixar)
 
 
 # ----------------------------------------------------------------- rotas: databook do lote
@@ -592,13 +649,19 @@ def gerar_databook(lote_id: int, dados: GerarEntrada, ctx: Contexto = Depends(QU
     lote = buscar_lote(db, lote_id)
     if not lote_concluido(db, lote):
         raise HTTPException(409, "O databook só é gerado depois que todas as etapas do lote forem aprovadas (até a embalagem).")
+    info = dados_capa(db, lote)
+    if not info["op_cadastrada"]:
+        raise HTTPException(
+            422,
+            f"O databook não foi gerado: a OP {lote.op} deste lote não existe no cadastro de OPs. Corrija a OP do lote "
+            "(Editar lote) ou cadastre a OP em Cadastros › Ordens de produção.",
+        )
     if not dados.data_aprovacao:
         raise HTTPException(422, "Digite a DATA DE APROVAÇÃO antes de gerar o databook.")
     aprovador = db.get(Usuario, dados.aprovador_id) if dados.aprovador_id else None
     if not aprovador or not aprovador.ativo or not aprovador.pode_aprovar:
         raise HTTPException(422, "Escolha em \"Aprovado por\" um usuário que pode aprovar pela Qualidade.")
 
-    info = dados_capa(db, lote)
     produto = limpar_texto(dados.produto).strip() or info["produto"]
     data = dados.data_aprovacao.strftime("%d/%m/%Y")
     secoes, checklist = secoes_do_lote(db, lote)
@@ -666,5 +729,6 @@ def conferir_databook_lote(lote_id: int, arquivo: str = "", _: Contexto = Depend
         "arquivo": revisao["arquivo"],
         "revisao": revisao["revisao"],
         "gerado_em": revisao["gerado_em"],
+        "op_cadastrada": db.scalar(select(OrdemProducao.id).where(OrdemProducao.op == lote.op)) is not None,
         "resultado": conferir_databook(caminho, lote.op, lote.numero),
     }

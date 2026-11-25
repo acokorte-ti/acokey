@@ -10,6 +10,7 @@ Regras:
 import re
 import secrets
 import unicodedata
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
@@ -52,6 +53,12 @@ def nome_seguro(nome: str | None, padrao: str = "arquivo") -> str:
     base = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("._-")[:100] or padrao
     extensao = re.sub(r"[^A-Za-z0-9]", "", extensao).lower()[:8]
     return f"{base}.{extensao}" if extensao else base
+
+
+def em_ordem_do_databook(anexos: Iterable, nome: Callable[[str], str] = lambda texto: texto) -> list:
+    """Ordem dos documentos de uma etapa na tela e no databook: a escolhida pelo usuário (Anexo.ordem) e, sem ordem
+    escolhida, a alfabética do nome do arquivo, como no sistema antigo. Anexo enviado depois de ordenar vai para o fim."""
+    return sorted(anexos, key=lambda a: (a.ordem is None, a.ordem or 0, nome(a.nome).lower(), a.id))
 
 
 def _pasta_relativa(pasta: str) -> str:

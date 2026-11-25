@@ -23,7 +23,15 @@ from sqlalchemy.orm import Session
 
 from app import ciclo_lote, fluxo, formularios, parametros
 from app.api_recursos import listar_desenhos
-from app.arquivos import DOCUMENTOS, IMAGENS, copiar_arquivo, nome_seguro, resposta_arquivo, salvar_upload
+from app.arquivos import (
+    DOCUMENTOS,
+    IMAGENS,
+    copiar_arquivo,
+    em_ordem_do_databook,
+    nome_seguro,
+    resposta_arquivo,
+    salvar_upload,
+)
 from app.config import agora_local
 from app.db import get_db
 from app.estado import estado_lotes
@@ -66,7 +74,8 @@ def _etapa(chave: str) -> fluxo.Etapa:
 
 
 def _aplicavel(etapa: fluxo.Etapa, lote: Lote) -> None:
-    if not etapa.aplicavel(lote.tipo):
+    """Aceita a etapa obrigatória e a opcional para o tipo (ex.: dureza no ARK)."""
+    if not etapa.abrivel(lote.tipo):
         raise HTTPException(422, f"A etapa '{etapa.curto}' não se aplica a lotes {lote.tipo}.")
 
 
@@ -177,7 +186,8 @@ def _limpo(valor: Any, profundidade: int = 0) -> Any:
 def ver_etapa(lote_id: int, chave: str, sub: str = "", ctx: Contexto = Depends(QUALQUER), db: Session = Depends(get_db)) -> dict:
     lote = buscar_lote(db, lote_id)
     etapa = _etapa(chave)
-    aplicavel = etapa.aplicavel(lote.tipo)
+    aplicavel = etapa.abrivel(lote.tipo)
+    opcional = etapa.opcional(lote.tipo)
     subs = list(etapa.subs_de(lote.tipo)) if aplicavel else list(etapa.subs)
     sub = sub if sub in subs else subs[0]
     indice = fluxo.INDICE[chave]
@@ -192,7 +202,7 @@ def ver_etapa(lote_id: int, chave: str, sub: str = "", ctx: Contexto = Depends(Q
         for nc in db.scalars(consulta):
             nc_por_registro[nc.registro_id] = nc
     anexos = list(db.scalars(_anexos_validos(lote_id, chave).order_by(Anexo.id.desc())))
-    documentos = [a for a in anexos if not a.apenas_registro]
+    documentos = em_ordem_do_databook(a for a in anexos if not a.apenas_registro)  # a ordem do databook
 
     espec = db.get(EspecificacaoTipo, lote.tipo)
     espec_json = None
@@ -231,12 +241,13 @@ def ver_etapa(lote_id: int, chave: str, sub: str = "", ctx: Contexto = Depends(Q
         "etapa": {
             "chave": etapa.chave, "indice": indice, "nome": etapa.nome_de(lote.tipo), "curto": etapa.curto_de(lote.tipo),
             "setor": etapa.setor, "formulario": etapa.formulario, "exige_anexo": etapa.exige_anexo,
-            "relatorio": etapa.relatorio_de(lote.tipo), "aplicavel": aplicavel,
+            "relatorio": etapa.relatorio_de(lote.tipo), "aplicavel": aplicavel, "opcional": opcional,
             "situacao": fluxo.situacao_etapa(indice, lote.tipo, estado, indice_real),
             "subs": [{"sub": s, "nome": fluxo.SUB_NOME.get(s, s),
                       "status": (ultimos[(lote_id, chave, s)].status if (lote_id, chave, s) in ultimos else None)} for s in subs],
-            # O formulário detalhado só vale para etapa já liberada; o atalho por documento vale para qualquer uma
-            "liberada": indice <= lote.etapa,
+            # O formulário detalhado só vale para etapa já liberada (a opcional não depende do cursor); o atalho por
+            # documento vale para qualquer uma
+            "liberada": opcional or indice <= lote.etapa,
         },  # fmt: skip
         "sub": sub,
         "pode_avancar": lote.etapa == indice and fluxo.pode_avancar(lote.etapa, lote.tipo, estado),
@@ -278,7 +289,7 @@ def registrar(lote_id: int, chave: str, corpo: CorpoRegistro, ctx: Contexto = De
     campos = _limpo(corpo.campos)
     if len(json.dumps(campos, ensure_ascii=False)) > 300_000:
         raise HTTPException(413, "O formulário está grande demais.")
-    if fluxo.INDICE[chave] > lote.etapa:
+    if fluxo.INDICE[chave] > lote.etapa and not etapa.opcional(lote.tipo):
         raise HTTPException(409, "Esta etapa ainda não é a etapa atual do lote. Anexe o documento e use \"Aprovar com base no "
                                  "documento anexado\": o lote avança sozinho até aqui.")  # fmt: skip
     try:
@@ -427,6 +438,32 @@ def _salvar_varios(arquivos: list[UploadFile], pasta: str, extensoes: set[str]) 
         except HTTPException as erro:
             ignorados.append(str(erro.detail))
     return salvos, ignorados
+
+
+class OrdemAnexos(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=500)
+
+
+@rota.put("/lotes/{lote_id}/etapas/{chave}/anexos/ordem")
+def ordenar_anexos(
+    lote_id: int, chave: str, corpo: OrdemAnexos, ctx: Contexto = Depends(REGISTRO), db: Session = Depends(get_db)
+) -> dict:
+    """Ordem dos documentos da etapa no databook (e na tela). Recebe todos os documentos da etapa, na ordem nova."""
+    lote = buscar_lote(db, lote_id)
+    etapa = _etapa(chave)
+    _aplicavel(etapa, lote)
+    documentos = {a.id: a for a in db.scalars(_anexos_validos(lote_id, chave).where(Anexo.apenas_registro.is_(False)))}
+    if len(corpo.ids) != len(set(corpo.ids)) or set(corpo.ids) != set(documentos):
+        raise HTTPException(409, "Os documentos da etapa mudaram enquanto você ordenava. Recarregue a página e tente de novo.")
+    antes = [a.nome for a in em_ordem_do_databook(documentos.values())]
+    for posicao, anexo_id in enumerate(corpo.ids, start=1):
+        documentos[anexo_id].ordem = posicao
+    depois = [documentos[i].nome for i in corpo.ids]
+    if antes != depois:
+        auditar(db, ctx, "ORDENAR", "anexos", f"{lote_id}/{chave}", {"etapa": chave, "ordem": [antes, depois]},
+                lote_id=lote_id)  # fmt: skip
+    db.commit()
+    return {"ids": corpo.ids}
 
 
 @rota.post("/lotes/{lote_id}/etapas/{chave}/anexos", status_code=201)
@@ -733,17 +770,22 @@ def mapa_lote(lote_id: int, _: Contexto = Depends(QUALQUER), db: Session = Depen
     lote = buscar_lote(db, lote_id)
     estados, ultimos = estado_lotes(db, [lote_id])
     indice_real = fluxo.etapa_real(lote.tipo, estados.get(lote_id, {}))
-    anexos = list(db.scalars(select(Anexo).where(Anexo.lote_id == lote_id, Anexo.removido_em.is_(None),
-                                                 Anexo.apenas_registro.is_(False)).order_by(Anexo.id)))  # fmt: skip
+    anexos = em_ordem_do_databook(db.scalars(select(Anexo).where(Anexo.lote_id == lote_id, Anexo.removido_em.is_(None),
+                                                                 Anexo.apenas_registro.is_(False)).order_by(Anexo.id)))  # fmt: skip
     linhas = []
     for etapa in fluxo.ETAPAS:
-        if not etapa.aplicavel(lote.tipo):
+        # Etapa opcional (ex.: dureza no ARK) só aparece no mapa se alguém registrou ou anexou algo nela
+        lancada = any((lote_id, etapa.chave, s) in ultimos for s in etapa.subs_de(lote.tipo)) or any(
+            a.etapa == etapa.chave for a in anexos
+        )
+        if not (etapa.aplicavel(lote.tipo) or (etapa.opcional(lote.tipo) and lancada)):
             continue
         for s in etapa.subs_de(lote.tipo):
             r = ultimos.get((lote_id, etapa.chave, s))
             linhas.append({
                 "etapa": etapa.chave, "sub": s,
-                "nome": etapa.curto_de(lote.tipo) + (f" / {fluxo.SUB_NOME[s]}" if s else ""),
+                "nome": etapa.curto_de(lote.tipo) + (f" / {fluxo.SUB_NOME[s]}" if s else "")
+                + (" (opcional)" if etapa.opcional(lote.tipo) else ""),
                 "setor": etapa.setor, "status": r.status if r else "pendente",
                 "quando": r.quando if r else None, "responsavel": r.responsavel if r else "",
                 "anexos": [_anexo_json(a) for a in anexos if a.etapa == etapa.chave and a.sub in (s, "")],

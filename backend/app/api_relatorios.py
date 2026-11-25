@@ -160,8 +160,8 @@ def _assinaturas(executor: Usuario, aprovador: Usuario) -> dict:
 
 
 def _info_dureza(db: Session, lote: Lote) -> dict:
-    if lote.tipo not in ("PIN", "BOX"):
-        raise HTTPException(422, f"O relatório de Dureza (RIP-35) só se aplica a PIN e BOX. Este lote é {lote.tipo}.")
+    if not fluxo.POR_CHAVE["dureza"].abrivel(lote.tipo):
+        raise HTTPException(422, f"O relatório de Dureza (RIP-35) não se aplica a lotes {lote.tipo}.")
     minimo, maximo, especificacao, _ = especificacao_dureza(db, lote.tipo)
     cadastro = cadastros_op(db, [lote.op]).get(lote.op)
     return {
@@ -178,7 +178,8 @@ def _info_dureza(db: Session, lote: Lote) -> dict:
 
 
 def _imagem_pontos(tipo: str) -> str:
-    return "dureza_box.png" if tipo == "BOX" else "dureza_pin.png"
+    """Figura dos pontos de medição, na pasta de recursos do servidor (não vai para o Git). Sem ela, o PDF sai sem a figura."""
+    return {"BOX": "dureza_box.png", "ARK": "dureza_ark.png"}.get(tipo, "dureza_pin.png")
 
 
 @rota.get("/relatorios/dureza/{lote_id}")
