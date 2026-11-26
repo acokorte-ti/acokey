@@ -44,6 +44,7 @@ from app.relatorios_dados import (
     cadastros_op,
     cliente_da_op,
     data_br,
+    descricao_do_desenho,
     desenho_do_item,
     durometros,
     equipamento,
@@ -257,8 +258,10 @@ def gerar_dureza(lote_id: int, entrada: DurezaEntrada, ctx: Contexto = Depends(Q
         "equipamento_codigo": e.codigo,
         "inspecionado_por": executor.nome,
         "inspecionado_por_id": executor.id,
+        "inspecionado_por_cargo": executor.cargo or "",
         "aprovado_por": aprovador.nome,
         "aprovado_por_id": aprovador.id,
+        "aprovado_por_cargo": aprovador.cargo or "",
         "data": data_txt,
         "data_execucao": data_txt,
         "data_aprovacao": data_aprov,
@@ -461,6 +464,7 @@ def gerar_tt(
         "tecnico_cargo": executor.cargo or "Técnico de T. Térmico",
         "aprovado_por": aprovador.nome,
         "aprovado_por_id": aprovador.id,
+        "aprovado_por_cargo": aprovador.cargo or "",
         "data_tratamento": data_br(d_tratamento),
         "data_registro": data_br(d_registro),
         "data_aprovacao": data_br(d_aprovacao),
@@ -553,7 +557,7 @@ def _info_visual(db: Session, lote: Lote) -> dict:
     parafuso = "Sextavado M10x10mm ou M10x12mm" if ark else "Sextavado M6x1x10mm"
     designacao = "ARK" if ark else ler_param(db, PARAM_DESIGNACAO)
     designacao_laser = "ARK" if ark else ler_param(db, PARAM_DESIGNACAO_LASER)
-    diametro = re.search(r"(\d{2}-\d{2})", desenho or "")
+    diametro = re.search(r"(\d{2}-\d{2})", descricao_do_desenho(lote) or desenho or "")  # do nome inteiro do PDF
     return {
         "cliente": cliente_da_op(db, cadastro),
         "nome_peca": nome_peca(db, lote, cadastro),
@@ -676,8 +680,10 @@ def gerar_visual(
         "laser_formato": formato_legivel(formato),
         "inspecionado_por": executor.nome,
         "inspecionado_por_id": executor.id,
+        "inspecionado_por_cargo": executor.cargo or "",
         "aprovado_por": aprovador.nome,
         "aprovado_por_id": aprovador.id,
+        "aprovado_por_cargo": aprovador.cargo or "",
         "data": data_txt,
         "data_execucao": data_txt,
         "data_aprovacao": data_br(d_aprovacao),

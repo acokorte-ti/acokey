@@ -154,22 +154,45 @@ def cliente_da_op(db: Session, cadastro: OrdemProducao | None) -> str:
     return primeiro_nome(cadastro.cliente if cadastro else "") or parametros.ler(db, "cliente_nome_curto")
 
 
+# Primeira medida "N x N" da descrição (ex.: "ARK... -51,5x26x120mm DESENHO R0"): o Item do relatório para antes dela
+_RE_DIMENSOES = re.compile(r"[\s-]*\d+(?:[.,]\d+)?\s*[xX×]\s*\d")
+
+
+def item_sem_dimensoes(descricao: str | None) -> str:
+    """Item do cabeçalho dos relatórios: a descrição até as dimensões (sem elas e sem o que vem depois)."""
+    texto = (descricao or "").strip()
+    achado = _RE_DIMENSOES.search(texto)
+    return texto[: achado.start()].strip(" -") if achado and achado.start() > 0 else texto
+
+
 def nome_peca(db: Session, lote: Lote, cadastro: OrdemProducao | None) -> str:
     descricao = cadastro.descricao if cadastro else ""
-    return produto_sem_instr(descricao) or ler_param(db, PARAM_NOME_PECA, lote.tipo) or f"Chaveta {lote.tipo}"
+    return item_sem_dimensoes(produto_sem_instr(descricao)) or ler_param(db, PARAM_NOME_PECA, lote.tipo) or f"Chaveta {lote.tipo}"
 
 
-# Código do desenho dentro do nome do PDF (ex.: "ABC-DE-XYZ-PIN-18-22 REV 0"), copiado como está escrito
+# Código do desenho dentro do nome do PDF, copiado como está escrito (nunca "arrumado"):
+# depois de "DES" ("... 51x26mm DES ABC123 REV 0" -> "ABC123 REV 0") ou, sem "DES", o código com hífens
+# ("ABC-DE-XYZ-PIN-18-22 REV 0")
+_RE_DEPOIS_DE_DES = re.compile(r"\bDES\.?\s+(\S+(?:\s+REV\.?\s*\d+)?)", re.IGNORECASE)
 _RE_CODIGO_DESENHO = re.compile(r"\b[A-Z0-9]+(?:-[A-Z0-9]+){3,}(?:\s+REV\.?\s*\d+)?", re.IGNORECASE)
+
+
+def descricao_do_desenho(lote: Lote) -> str:
+    """Nome do PDF do desenho cadastrado para o item do lote ('' se não houver)."""
+    coditem = (lote.coditem or "").strip()
+    achado = next((d for d in listar_desenhos() if d["coditem"] == coditem), None) if coditem else None
+    return achado["descricao"] if achado else ""
+
+
+def codigo_do_desenho(descricao: str) -> str:
+    codigo = _RE_DEPOIS_DE_DES.search(descricao) or _RE_CODIGO_DESENHO.search(descricao)
+    return codigo.group(codigo.lastindex or 0) if codigo else descricao
 
 
 def desenho_do_item(db: Session, lote: Lote) -> str:
     """Desenho / revisão: do PDF do desenho cadastrado para o item; sem desenho, o padrão dos parâmetros."""
-    achado = next((d for d in listar_desenhos() if d["coditem"] == (lote.coditem or "").strip()), None) if lote.coditem else None
-    if achado:
-        codigo = _RE_CODIGO_DESENHO.search(achado["descricao"])
-        return codigo.group(0) if codigo else achado["descricao"]
-    return ler_param(db, PARAM_DESENHO, lote.tipo)
+    descricao = descricao_do_desenho(lote)
+    return codigo_do_desenho(descricao) if descricao else ler_param(db, PARAM_DESENHO, lote.tipo)
 
 
 def fornecedor_da_corrida(db: Session, lote: Lote) -> str:

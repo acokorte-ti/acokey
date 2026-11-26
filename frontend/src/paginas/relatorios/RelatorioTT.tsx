@@ -513,7 +513,7 @@ export function RelatorioTT({ loteId, cargaId }: { loteId: number | null; cargaI
               <div className="col-2">
                 <SeletorPessoa
                   id="tt-tecnico"
-                  rotulo="Executado por — Técnico de Trat. Térmico"
+                  rotulo="Executado por"
                   lista={dados.tecnicos}
                   valor={tecnico}
                   aoMudar={setTecnico}
@@ -522,7 +522,8 @@ export function RelatorioTT({ loteId, cargaId }: { loteId: number | null; cargaI
               <div className="col-2">
                 <SeletorPessoa
                   id="tt-aprovador"
-                  rotulo="Aprovado por — Gerente da Qualidade"
+                  rotulo="Aprovado por"
+                  dica="No relatório sai o cargo do cadastro da pessoa (tela Usuários)."
                   lista={dados.aprovadores}
                   valor={aprovador}
                   aoMudar={setAprovador}

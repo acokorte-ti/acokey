@@ -263,14 +263,15 @@ export function RelatorioVisual({ loteId }: { loteId: number }) {
             <div className="linha-campos">
               <SeletorPessoa
                 id="vis-executor"
-                rotulo="Executado por — Controle de Qualidade"
+                rotulo="Executado por"
                 lista={dados.executores}
                 valor={executor}
                 aoMudar={setExecutor}
               />
               <SeletorPessoa
                 id="vis-aprovador"
-                rotulo="Aprovado por — Gerente da Qualidade"
+                rotulo="Aprovado por"
+                dica="No relatório sai o cargo do cadastro da pessoa (tela Usuários)."
                 lista={dados.aprovadores}
                 valor={aprovador}
                 aoMudar={setAprovador}

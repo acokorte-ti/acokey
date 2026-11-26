@@ -126,6 +126,19 @@ def _celula(c, x, y_topo, w, h, texto="", *, negrito=False, tamanho=9.0, fundo=N
         c.drawString(x + 2 * mm, ty, txt)
 
 
+ENTRELINHA = 3.6 * mm
+
+
+def _celula_linhas(c, x, y_topo, w, h, linhas: list[str], *, tamanho=8.5) -> None:
+    """Célula com borda e várias linhas de texto (já quebradas na largura), centradas na altura."""
+    _celula(c, x, y_topo, w, h)
+    c.setFont(_f()["normal"], tamanho)
+    c.setFillColor(PRETO)
+    centro = y_topo - h / 2
+    for i, linha in enumerate(linhas):
+        c.drawString(x + 2 * mm, centro + (len(linhas) - 1) * ENTRELINHA / 2 - i * ENTRELINHA - tamanho * 0.35, linha)
+
+
 def _titulo_secao(c, y, texto, h=7 * mm, alinhar="C") -> float:
     _celula(c, X0, y, LARGURA_UTIL, h, texto, negrito=True, tamanho=8, alinhar=alinhar, fundo=AZUL, cor=colors.white)
     return y - h
@@ -375,8 +388,8 @@ def gerar_pdf_dureza(lote: dict, dados: dict, empresa: dict, imagem_pontos: Path
             ("Qtd. Inspecionada", f"{len(leituras) or 1} CP(s) / {n_pontos} pontos"),
         ])  # fmt: skip
 
-        # Figura dos pontos de medição (PIN ou BOX)
-        img_h, img_w = 30 * mm, 90 * mm
+        # Figura dos pontos de medição. A do ARK tem a foto e o desenho lado a lado: ocupa a largura da página.
+        img_h, img_w = 30 * mm, (LARGURA_UTIL if lote.get("tipo") == "ARK" else 90 * mm)
         if imagem_pontos and imagem_pontos.is_file():
             try:
                 c.drawImage(ImageReader(str(imagem_pontos)), X0 + (LARGURA_UTIL - img_w) / 2, y - img_h, img_w, img_h,
@@ -442,21 +455,24 @@ def gerar_pdf_dureza(lote: dict, dados: dict, empresa: dict, imagem_pontos: Path
             ("Procedimento interno", DOC_DUR["proc"]),
             ("Equipamento", dados.get("equipamento") or "—"),
         ]
-        altura_metodo = lin_h * (len(linhas_metodo) + 1)
-        if y - altura_metodo < TOPO_ASSINATURAS + 2 * mm:
+        col_rotulo = LARGURA_UTIL * 0.28
+        col_valor = LARGURA_UTIL - col_rotulo
+        blocos = [(rotulo, simpleSplit(str(valor), _f()["normal"], 8.5, col_valor - 4 * mm) or [""])
+                  for rotulo, valor in linhas_metodo]  # fmt: skip
+        alturas = [max(lin_h, len(linhas) * ENTRELINHA + 2.8 * mm) for _, linhas in blocos]
+        if y - lin_h - sum(alturas) < TOPO_ASSINATURAS + 2 * mm:
             y = nova_pagina()
         y = _titulo_secao(c, y, "MÉTODO, CRITÉRIO E EQUIPAMENTO", h=lin_h)
-        col_rotulo = LARGURA_UTIL * 0.28
-        for rotulo, valor in linhas_metodo:
-            _celula(c, X0, y, col_rotulo, lin_h, rotulo, negrito=True, tamanho=8.5, fundo=CINZA_FUNDO)
-            _celula(c, X0 + col_rotulo, y, LARGURA_UTIL - col_rotulo, lin_h, valor, tamanho=8.5, encolher=True, minimo=5)
-            y -= lin_h
+        for (rotulo, linhas), altura in zip(blocos, alturas, strict=True):
+            _celula(c, X0, y, col_rotulo, altura, rotulo, negrito=True, tamanho=8.5, fundo=CINZA_FUNDO)
+            _celula_linhas(c, X0 + col_rotulo, y, col_valor, altura, linhas, tamanho=8.5)
+            y -= altura
 
         bloco_assinaturas(
             c, TOPO_ASSINATURAS,
-            {"nome": dados.get("inspecionado_por"), "cargo": "Controle de Qualidade",
+            {"nome": dados.get("inspecionado_por"), "cargo": dados.get("inspecionado_por_cargo") or "Controle de Qualidade",
              "data": dados.get("data_execucao") or data_emissao, "assinatura": dados.get("assinatura_executado")},
-            {"nome": dados.get("aprovado_por"), "cargo": "Gerente da Qualidade",
+            {"nome": dados.get("aprovado_por"), "cargo": dados.get("aprovado_por_cargo") or "",
              "data": dados.get("data_aprovacao") or data_emissao, "assinatura": dados.get("assinatura_aprovado")},
         )  # fmt: skip
         rodape(c, DOC_DUR, referencia, data_emissao)
@@ -626,7 +642,7 @@ def gerar_pdf_tt(lote: dict, dados: dict, lotes_incluidos: list[dict], imagens: 
             c, 46 * mm,
             {"nome": dados.get("tecnico_nome"), "cargo": dados.get("tecnico_cargo") or "Técnico de Trat. Térmico",
              "data": dados.get("data_tratamento") or data_emissao, "assinatura": dados.get("assinatura_executado")},
-            {"nome": dados.get("aprovado_por"), "cargo": "Gerente da Qualidade",
+            {"nome": dados.get("aprovado_por"), "cargo": dados.get("aprovado_por_cargo") or "",
              "data": dados.get("data_aprovacao") or data_emissao, "assinatura": dados.get("assinatura_aprovado")},
         )  # fmt: skip
         rodape(c, DOC_TT, referencia, data_emissao)
@@ -713,9 +729,9 @@ def gerar_pdf_visual(lote: dict, dados: dict, imagens: dict, empresa: dict) -> b
 
         bloco_assinaturas(
             c, y,
-            {"nome": dados.get("inspecionado_por"), "cargo": "Controle de Qualidade",
+            {"nome": dados.get("inspecionado_por"), "cargo": dados.get("inspecionado_por_cargo") or "Controle de Qualidade",
              "data": dados.get("data_execucao") or data_emissao, "assinatura": dados.get("assinatura_executado")},
-            {"nome": dados.get("aprovado_por"), "cargo": "Gerente da Qualidade",
+            {"nome": dados.get("aprovado_por"), "cargo": dados.get("aprovado_por_cargo") or "",
              "data": dados.get("data_aprovacao") or data_emissao, "assinatura": dados.get("assinatura_aprovado")},
         )  # fmt: skip
         rodape(c, DOC_VIS, referencia, data_emissao)

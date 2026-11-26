@@ -11,7 +11,19 @@ from sqlalchemy import select
 
 from app import fluxo
 from app.api_relatorios import formatar_laser, formato_legivel, lote_completo
-from app.models import Anexo, CargaTT, Equipamento, EspecificacaoTipo, Evento, Lote, NaoConformidade, Registro, Usuario
+from app.models import (
+    Anexo,
+    CargaTT,
+    Equipamento,
+    EspecificacaoTipo,
+    Evento,
+    Lote,
+    NaoConformidade,
+    OrdemProducao,
+    Registro,
+    Usuario,
+)
+from app.relatorios_dados import codigo_do_desenho, item_sem_dimensoes
 
 LOTE_PIN = {"numero": "26-4-900001", "op": "900001", "tipo": "PIN", "corrida": "M999/26", "coditem": "1234567"}
 
@@ -175,6 +187,56 @@ def test_rip35_do_ark_usa_a_faixa_do_ark_e_sai_sem_figura(db, base, como):
     assert r.json()["status"] == "REPROVADO"  # 36 serve para PIN/BOX, não para o ARK
 
 
+def test_item_e_desenho_do_cabecalho_sem_dimensoes():
+    assert item_sem_dimensoes("ARK99XY99 -51,5x26,6x120mm  ABCDEF99XY99 R0") == "ARK99XY99"
+    assert item_sem_dimensoes("CHAVETA EXEMPLO ARK 32-36 51x26,5x120mm DES ABC1234 REV 0") == "CHAVETA EXEMPLO ARK 32-36"
+    assert item_sem_dimensoes("ABC-DE-XYZ1-PIN-18-22 REV 0") == "ABC-DE-XYZ1-PIN-18-22 REV 0"  # sem dimensões: inteiro
+    assert item_sem_dimensoes("") == ""
+
+    assert codigo_do_desenho("CHAVETA EXEMPLO ARK 99XY-99XY-99 51,5x26,6x120mm DES ABCDEF99XY99 REV 0") == "ABCDEF99XY99 REV 0"
+    assert codigo_do_desenho("INSTR. CONTROLE TRAVAMENTO DES ABC-DE-XYZ1-PIN-18-22 REV 0") == "ABC-DE-XYZ1-PIN-18-22 REV 0"
+    assert codigo_do_desenho("INSTR. CONTROLE TRAVAMENTO ABC-DE-XYZ-BOX-18-22 REV 0") == "ABC-DE-XYZ-BOX-18-22 REV 0"
+    assert codigo_do_desenho("DESENHO SEM CODIGO") == "DESENHO SEM CODIGO"  # sem código reconhecível: o nome inteiro
+
+
+def test_rip35_do_ark_com_figura_item_desenho_cargo_e_equipamento_comprido(db, base, como, pasta_arquivos):
+    """Cabeçalho só com o item (sem dimensões) e o código do desenho; cargo do cadastro; equipamento quebra a linha."""
+    db.add(OrdemProducao(op="900002", cliente="CLIENTE EXEMPLO", tipo="ARK",
+                         descricao="INSTR. CONTROLE TRAVAMENTO ARK99XY99 -51,5x26,6x120mm  ABCDEF99XY99 R0"))  # fmt: skip
+    db.add(Equipamento(codigo="DUR-02", descricao="Durômetro de bancada com penetrador de diamante e mesa para peças longas",
+                       marca="Marca Exemplo de Nome Bem Comprido", certificado="0002/26-EXEMPLO-DE-CERTIFICADO",
+                       data_calibracao=date(2026, 1, 10), validade_calibracao=date(2027, 1, 10)))  # fmt: skip
+    db.commit()
+    desenhos = pasta_arquivos / "recursos" / "desenhos"
+    desenhos.mkdir(parents=True)
+    (desenhos / "ORIGEM - 7654321 CHAVETA EXEMPLO ARK 99XY-99XY-99 51,5x26,6x120mm DES ABCDEF99XY99 REV 0.pdf").write_bytes(b"%PDF")
+    (pasta_arquivos / "recursos" / "relatorios" / "dureza_ark.png").write_bytes(_png((10, 200, 10)))
+    ark = lote_exemplo(db, numero="26-4-900002", op="900002", tipo="ARK", coditem="7654321")
+    qualidade, csrf = como(modulos=["qualidade"], pode_aprovar=True, login="gerente", nome="Beltrano Garantia")
+    gerente = _id(db, "gerente")
+    db.get(Usuario, gerente).cargo = "Garantia da Qualidade"
+    db.commit()
+
+    tela = qualidade.get(f"/api/relatorios/dureza/{ark.id}").json()
+    assert tela["info"]["nome_peca"] == "ARK99XY99" and tela["info"]["desenho"] == "ABCDEF99XY99 REV 0"
+    assert tela["tem_imagem_pontos"] is True
+    corpo = _dureza(gerente, gerente, "44", "45", equipamento_codigo="DUR-02")
+    r = qualidade.post(f"/api/relatorios/dureza/{ark.id}", json=corpo, headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 200, r.text
+    assert _ultimo(db, Registro, ark.id, "dureza").dados["aprovado_por_cargo"] == "Garantia da Qualidade"
+
+    conteudo = (pasta_arquivos / _ultimo(db, Anexo, ark.id, "dureza").arquivo).read_bytes()
+    with pymupdf.open(stream=conteudo, filetype="pdf") as doc:
+        texto = "\n".join(pagina.get_text() for pagina in doc)
+        assert sum(len(pagina.get_images()) for pagina in doc) >= 1  # Figura 1 (pontos de medição do ARK)
+        direita = max(palavra[2] for pagina in doc for palavra in pagina.get_text("words"))
+        largura = doc[0].rect.width
+    for esperado in ("ARK99XY99", "ABCDEF99XY99 REV 0", "Garantia da Qualidade", "vencimento em 10/01/2027."):
+        assert esperado in texto, esperado
+    assert "51,5x26,6x120mm" not in texto and "Gerente da Qualidade" not in texto
+    assert direita <= largura - 10 * 72 / 25.4, "texto passou da margem direita da página"
+
+
 def test_dureza_e_visual_so_para_a_qualidade(db, base, como):
     lote = lote_exemplo(db, **LOTE_PIN)
     tt, csrf = como(modulos=["producao_tt", "pcp"])
@@ -238,6 +300,7 @@ def test_tt_pela_carga_replica_em_todos_os_lotes_e_conclui_a_carga(db, base, com
                          "Forno: Forno de Têmpera - Marca Exemplo (FO-01)", "35,0 HRc", "1º Revenimento"):  # fmt: skip
             assert esperado in texto, esperado
         assert "2º Revenimento" not in texto
+        assert "Gerente da Qualidade" not in texto and "Teste" in texto  # cargo do cadastro de quem aprovou
     assert db.get(Lote, a.id).etapa == fluxo.INDICE["dureza"]
     assert db.get(Lote, b.id).etapa == fluxo.INDICE["dureza"]
     concluida = db.get(CargaTT, carga["id"])
@@ -318,6 +381,7 @@ def test_visual_aprovado_com_fotos_e_codigo_laser(db, base, como, pasta_arquivos
     for esperado in ("RELATÓRIO DE INSPEÇÃO VISUAL E MARCAÇÃO A LASER", "FOR-VIS-IS-100.1-F", "IS.100.1-F Rev.00",
                      "RESULTADO DA INSPEÇÃO: APROVADO", "Aspecto geral ok", "[Imagem a anexar]", "VIS-2026-900001"):  # fmt: skip
         assert esperado in texto, esperado
+    assert "Gerente da Qualidade" not in texto and "Controle de Qualidade" not in texto  # cargos do cadastro ("Teste")
 
 
 def _jpg() -> bytes:
