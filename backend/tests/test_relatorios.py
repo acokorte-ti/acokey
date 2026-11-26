@@ -231,8 +231,9 @@ def test_rip35_do_ark_com_figura_item_desenho_cargo_e_equipamento_comprido(db, b
         assert sum(len(pagina.get_images()) for pagina in doc) >= 1  # Figura 1 (pontos de medição do ARK)
         direita = max(palavra[2] for pagina in doc for palavra in pagina.get_text("words"))
         largura = doc[0].rect.width
+    corrido = " ".join(texto.split())  # o equipamento quebra a linha onde a fonte do servidor mandar
     for esperado in ("ARK99XY99", "ABCDEF99XY99 REV 0", "Garantia da Qualidade", "vencimento em 10/01/2027."):
-        assert esperado in texto, esperado
+        assert esperado in corrido, esperado
     assert "51,5x26,6x120mm" not in texto and "Gerente da Qualidade" not in texto
     assert direita <= largura - 10 * 72 / 25.4, "texto passou da margem direita da página"
 
