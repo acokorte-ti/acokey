@@ -168,22 +168,25 @@ def test_dureza_validacoes(db, base, como):
     assert db.scalar(select(Registro).where(Registro.etapa == "dureza")) is None
 
 
-def test_rip35_traz_a_amostra_de_10_por_cento_da_op(db, base, como, pasta_arquivos):
-    """Linhas prontas = 10% das peças da OP, arredondado para cima; sem quantidade na OP, a do lote."""
+def test_rip35_traz_a_amostra_de_10_por_cento_do_lote(db, base, como, pasta_arquivos):
+    """Linhas prontas = 10% das peças do LOTE (a quantidade liberada), arredondado para cima; nunca a da OP."""
     lote = lote_exemplo(db, **LOTE_PIN)  # 72 peças no lote
+    db.add(OrdemProducao(op="900001", cliente="CLIENTE EXEMPLO", tipo="PIN", qt_lote=105))  # a OP tem mais peças
+    db.commit()
     qualidade, csrf = como(modulos=["qualidade"], pode_aprovar=True, login="gerente")
     gerente = _id(db, "gerente")
     url = f"/api/relatorios/dureza/{lote.id}"
-    assert qualidade.get(url).json()["amostra"] == {"qtd": 72, "base": "lote", "linhas": 8, "limite": 200}  # sem OP
+    assert qualidade.get(url).json()["amostra"] == {"qtd": 72, "base": "lote", "linhas": 8, "limite": 200}
 
-    op = OrdemProducao(op="900001", cliente="CLIENTE EXEMPLO", tipo="PIN", qt_lote=None)
-    db.add(op)
-    db.commit()
-    assert qualidade.get(url).json()["amostra"]["linhas"] == 8  # OP sem quantidade: vale a do lote
-    for qtd, linhas in ((45, 5), (40, 4), (41, 5), (1, 1), (9, 1), (2500, 200)):
-        op.qt_lote = qtd
+    for qtd, linhas in ((50, 5), (40, 4), (41, 5), (1, 1), (9, 1), (2500, 200)):  # 50 liberadas de uma OP de 105: 5
+        db.get(Lote, lote.id).qtd = qtd
         db.commit()
-        assert qualidade.get(url).json()["amostra"] == {"qtd": qtd, "base": "op", "linhas": linhas, "limite": 200}, qtd
+        assert qualidade.get(url).json()["amostra"] == {"qtd": qtd, "base": "lote", "linhas": linhas, "limite": 200}, qtd
+    db.get(Lote, lote.id).qtd = 0  # lote antigo sem quantidade: só então vale a da OP
+    db.commit()
+    assert qualidade.get(url).json()["amostra"] == {"qtd": 105, "base": "op", "linhas": 11, "limite": 200}
+    db.get(Lote, lote.id).qtd = 72
+    db.commit()
 
     leituras = [{"cp": f"OP900001-DUR{i}", "valores": ["35", "36"]} for i in range(1, 61)]  # mais que as 50 de antes
     r = qualidade.post(url, json=_dureza(gerente, gerente) | {"leituras": leituras}, headers={"X-CSRF-Token": csrf})

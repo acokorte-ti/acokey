@@ -67,7 +67,7 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
   // Valores iniciais quando a tela carrega (e ao trocar de lote pelos atalhos da carga)
   useEffect(() => {
     if (!dados) return;
-    // A tabela já vem com a amostra: 10% das peças da OP (DUR1, DUR2...)
+    // A tabela já vem com a amostra: 10% das peças do lote (DUR1, DUR2...)
     const n = Math.max(1, dados.amostra.linhas);
     contador.current = n;
     setLinhas(Array.from({ length: n }, (_, i) => linhaVazia(dados.lote.op, i + 1)));

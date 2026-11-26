@@ -213,12 +213,16 @@ LIMITE_CPS_DUREZA = 200  # linhas (corpos de prova) aceitas num RIP-35
 
 
 def amostra_dureza(db: Session, lote: Lote) -> dict:
-    """Quantas linhas (corpos de prova) o RIP-35 traz prontas: 10% das peças da OP, arredondado para cima.
+    """Quantas linhas (corpos de prova) o RIP-35 traz prontas: 10% das peças do lote, arredondado para cima.
 
-    Regra da Qualidade (26/11/2026). A base é a quantidade da OP no cadastro; sem ela, a do lote.
+    Regra da Qualidade (26/11/2026). A base é a quantidade do LOTE (a liberada ao criar o lote, que pode ser menor
+    que a da OP no Mega), nunca a da OP. A da OP só entra se o lote estiver sem quantidade (lote antigo).
     """
-    cadastro = cadastros_op(db, [lote.op]).get(lote.op)
-    qtd, base = (cadastro.qt_lote, "op") if cadastro and cadastro.qt_lote else (lote.qtd or 0, "lote")
+    if lote.qtd:
+        qtd, base = lote.qtd, "lote"
+    else:
+        cadastro = cadastros_op(db, [lote.op]).get(lote.op)
+        qtd, base = (cadastro.qt_lote or 0, "op") if cadastro else (0, "lote")
     linhas = min(max(1, -(-qtd // 10)), LIMITE_CPS_DUREZA)  # -(-a // b): divisão arredondada para cima
     return {"qtd": qtd, "base": base, "linhas": linhas}
 

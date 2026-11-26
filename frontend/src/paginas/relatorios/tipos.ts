@@ -60,7 +60,7 @@ export interface TelaDureza {
   };
   imagem_pontos: string;
   tem_imagem_pontos: boolean;
-  /** Linhas que o RIP-35 traz prontas: 10% das peças da OP (base "op") ou do lote, se a OP não tiver quantidade. */
+  /** Linhas que o RIP-35 traz prontas: 10% das peças do lote (base "lote"); a da OP ("op") só se o lote não tiver quantidade. */
   amostra: { qtd: number; base: 'op' | 'lote'; linhas: number; limite: number };
   durometros: Equipamento[];
   executores: Pessoa[];
