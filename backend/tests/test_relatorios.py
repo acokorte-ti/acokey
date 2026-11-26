@@ -168,6 +168,31 @@ def test_dureza_validacoes(db, base, como):
     assert db.scalar(select(Registro).where(Registro.etapa == "dureza")) is None
 
 
+def test_rip35_traz_a_amostra_de_10_por_cento_da_op(db, base, como, pasta_arquivos):
+    """Linhas prontas = 10% das peças da OP, arredondado para cima; sem quantidade na OP, a do lote."""
+    lote = lote_exemplo(db, **LOTE_PIN)  # 72 peças no lote
+    qualidade, csrf = como(modulos=["qualidade"], pode_aprovar=True, login="gerente")
+    gerente = _id(db, "gerente")
+    url = f"/api/relatorios/dureza/{lote.id}"
+    assert qualidade.get(url).json()["amostra"] == {"qtd": 72, "base": "lote", "linhas": 8, "limite": 200}  # sem OP
+
+    op = OrdemProducao(op="900001", cliente="CLIENTE EXEMPLO", tipo="PIN", qt_lote=None)
+    db.add(op)
+    db.commit()
+    assert qualidade.get(url).json()["amostra"]["linhas"] == 8  # OP sem quantidade: vale a do lote
+    for qtd, linhas in ((45, 5), (40, 4), (41, 5), (1, 1), (9, 1), (2500, 200)):
+        op.qt_lote = qtd
+        db.commit()
+        assert qualidade.get(url).json()["amostra"] == {"qtd": qtd, "base": "op", "linhas": linhas, "limite": 200}, qtd
+
+    leituras = [{"cp": f"OP900001-DUR{i}", "valores": ["35", "36"]} for i in range(1, 61)]  # mais que as 50 de antes
+    r = qualidade.post(url, json=_dureza(gerente, gerente) | {"leituras": leituras}, headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 200, r.text
+    texto = _texto_pdf(pasta_arquivos, _ultimo(db, Anexo, lote.id, "dureza"))
+    assert "60 CP(s) / 120 pontos" in texto and "OP900001-DUR60" in texto and "Pág. 2/" in texto
+    r = qualidade.post(url, json=_dureza(gerente, gerente) | {"leituras": leituras * 4}, headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 422  # acima do limite de 200 linhas
+
 def test_rip35_do_ark_usa_a_faixa_do_ark_e_sai_sem_figura(db, base, como):
     """Dureza é opcional no ARK: o RIP-35 sai com a faixa do ARK; sem a imagem dos pontos no servidor, sem a figura."""
     ark = lote_exemplo(db, numero="26-4-900002", op="900002", tipo="ARK")

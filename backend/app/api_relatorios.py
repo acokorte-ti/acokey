@@ -33,10 +33,12 @@ from app.models import Anexo, CargaTT, Lote, NaoConformidade, OrdemProducao, Reg
 from app.nc import abrir_nc_automatica, fechar_nc_se_aberta
 from app.pdf_comum import caminho_assinatura, empresa
 from app.relatorios_dados import (
+    LIMITE_CPS_DUREZA,
     MATERIAL,
     PARAM_DESIGNACAO,
     PARAM_DESIGNACAO_LASER,
     PARAM_ITEM_TT,
+    amostra_dureza,
     aprovadores,
     avancar_se_parado,
     buscar_aprovador,
@@ -202,6 +204,7 @@ def tela_dureza(lote_id: int, ctx: Contexto = Depends(QUALIDADE), db: Session = 
         "info": info,
         "imagem_pontos": imagem,
         "tem_imagem_pontos": caminho_seguro(f"recursos/relatorios/{imagem}") is not None,
+        "amostra": amostra_dureza(db, lote) | {"limite": LIMITE_CPS_DUREZA},
         "durometros": [equipamento_dict(e) for e in durometros(db)],
         "executores": executores(db, ctx, MODULOS_QUALIDADE),
         "aprovadores": aprovadores(db),
@@ -218,7 +221,7 @@ class LeituraCP(BaseModel):
 
 
 class DurezaEntrada(BaseModel):
-    leituras: list[LeituraCP] = Field(..., max_length=50)
+    leituras: list[LeituraCP] = Field(..., max_length=LIMITE_CPS_DUREZA)
     equipamento_codigo: str = Field("", max_length=30)
     executado_por: int | None = None
     aprovado_por: int | None = None

@@ -26,8 +26,21 @@ from app.db import Base, SessionLocal, engine  # noqa: E402
 SENHA_ADMIN_NOVA = "Nova-Senha-Gestor-77"
 
 
+def _banco_e_o_de_teste() -> bool:
+    """O engine só é o de teste se a configuração foi lida DEPOIS deste arquivo trocar as variáveis.
+
+    Se algo importou o app antes (ex.: um script que chama pytest.main), o config() em cache é o do .env, e o
+    drop_all abaixo apagaria o banco de desenvolvimento. Nesse caso os testes param antes de tocar no banco.
+    """
+    from app.config import config
+
+    return config().app_env == "teste" and config().database_url == os.environ["DATABASE_URL"]
+
+
 @pytest.fixture(autouse=True)
 def banco_limpo():
+    if not _banco_e_o_de_teste():
+        pytest.exit("O app foi carregado antes do conftest: o banco não é o temporário de teste. Nada foi apagado.", 2)
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     pasta = _TMP / "arquivos"

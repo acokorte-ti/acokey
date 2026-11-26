@@ -39,6 +39,10 @@ function numerosDaLinha(linha: LinhaCP): number[] {
   return linha.valores.map(numeroDigitado).filter((n): n is number => n !== null);
 }
 
+function linhaVazia(op: string, n: number): LinhaCP {
+  return { chave: n, cp: `OP${op}-DUR${n}`, valores: ['', '', '', '', ''] };
+}
+
 function StatusTexto({ status }: { status: 'APROVADO' | 'REPROVADO' | '' }) {
   if (!status) return <span className="sub-linha">—</span>;
   return <span className={`selo ${status === 'APROVADO' ? 'selo-ok' : 'selo-erro'}`}>{status}</span>;
@@ -63,8 +67,10 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
   // Valores iniciais quando a tela carrega (e ao trocar de lote pelos atalhos da carga)
   useEffect(() => {
     if (!dados) return;
-    contador.current = 1;
-    setLinhas([{ chave: 1, cp: `OP${dados.lote.op}-DUR1`, valores: ['', '', '', '', ''] }]);
+    // A tabela já vem com a amostra: 10% das peças da OP (DUR1, DUR2...)
+    const n = Math.max(1, dados.amostra.linhas);
+    contador.current = n;
+    setLinhas(Array.from({ length: n }, (_, i) => linhaVazia(dados.lote.op, i + 1)));
     setEquipamento(dados.durometros.length === 1 ? dados.durometros[0].codigo : '');
     setExecutor(escolhaInicial(dados.executores, dados.usuario_id));
     setAprovador(escolhaInicial(dados.aprovadores, dados.usuario_id));
@@ -93,7 +99,8 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
     );
   }
   if (!dados) return <Carregando />;
-  const { lote, info } = dados;
+  const { lote, info, amostra } = dados;
+  const comLeitura = linhas.filter((l) => numerosDaLinha(l).length > 0).length;
 
   function mudarValor(chave: number, ponto: number, valor: string) {
     setLinhas((atual) =>
@@ -104,7 +111,7 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
   function adicionarLinha() {
     contador.current += 1;
     const n = contador.current;
-    setLinhas((atual) => [...atual, { chave: n, cp: `OP${lote.op}-DUR${n}`, valores: ['', '', '', '', ''] }]);
+    setLinhas((atual) => [...atual, linhaVazia(lote.op, n)]);
   }
 
   async function enviar(evento: FormEvent) {
@@ -217,6 +224,14 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
               Cada linha é um corpo de prova (DUR1, DUR2…). Digite as 5 leituras feitas nos pontos da imagem. Faixa aceitável:{' '}
               <strong>{info.especificacao}</strong>. Verde = dentro, vermelho = fora.
             </p>
+            <p className="dica" id="dureza-amostra">
+              {amostra.base === 'op' ? 'A OP' : 'O lote'} tem <strong>{amostra.qtd}</strong> {amostra.qtd === 1 ? 'peça' : 'peças'}: a
+              amostra é de 10%, arredondado para cima ={' '}
+              <strong>
+                {amostra.linhas} {amostra.linhas === 1 ? 'corpo de prova' : 'corpos de prova'}
+              </strong>
+              . As linhas já vêm prontas. Linha sem leitura não entra no relatório.
+            </p>
             <div className="tabela-rolagem">
               <table className="tabela rel-medicoes">
                 <caption className="so-leitor">Leituras de dureza por corpo de prova</caption>
@@ -299,11 +314,18 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
               </table>
             </div>
             <p className="acoes">
-              <button type="button" className="botao" onClick={adicionarLinha} disabled={linhas.length >= 50}>
+              <button type="button" className="botao" onClick={adicionarLinha} disabled={linhas.length >= amostra.limite}>
                 + Adicionar mais uma peça (DUR{contador.current + 1})
               </button>
               <span className="dica">Use para medir mais corpos de prova no mesmo lote.</span>
             </p>
+            {geral && comLeitura < amostra.linhas && (
+              <Faixa tipo="alerta">
+                Há leitura em {comLeitura} de {amostra.linhas} {amostra.linhas === 1 ? 'peça' : 'peças'} da amostra (10% da{' '}
+                {amostra.base === 'op' ? 'OP' : 'quantidade do lote'}). O relatório pode ser gerado assim, mas confira se faltou medir
+                alguma peça.
+              </Faixa>
+            )}
             <div
               className={`rel-status ${geral ? (geral.aprovado ? 'rel-status-ok' : 'rel-status-erro') : ''}`}
               role="status"
@@ -313,7 +335,7 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
               <strong>{geral ? (geral.aprovado ? 'APROVADO' : 'REPROVADO') : '—'}</strong>
               {geral && (
                 <span className="sub-linha">
-                  {geral.n} {geral.n === 1 ? 'medição' : 'medições'} em {linhas.length} {linhas.length === 1 ? 'peça' : 'peças'}, faixa{' '}
+                  {geral.n} {geral.n === 1 ? 'medição' : 'medições'} em {comLeitura} {comLeitura === 1 ? 'peça' : 'peças'}, faixa{' '}
                   {decimal(geral.menor)} a {decimal(geral.maior)} HRc (especificação {min}–{max})
                 </span>
               )}
