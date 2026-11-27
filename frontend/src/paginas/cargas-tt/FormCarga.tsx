@@ -6,7 +6,7 @@ import { Confirmacao } from '../../componentes/Modal';
 import { SeloTipo } from '../../componentes/Selos';
 import { api, mensagemDeErro } from '../../lib/api';
 import { useAvisos } from '../../lib/avisos';
-import { inteiro, pecas, TRACO } from '../../lib/formato';
+import { contemTermos, inteiro, pecas, TRACO } from '../../lib/formato';
 import type { TipoLote } from '../../lib/tipos';
 import { enterVaiParaProximo } from '../../lib/teclado';
 import { useCarga } from '../../lib/useCarga';
@@ -39,6 +39,7 @@ export function FormCarga({ cargaId }: { cargaId: number | null }) {
   const [observacoes, setObservacoes] = useState('');
   const [selecionados, setSelecionados] = useState<number[]>([]);
   const [filtro, setFiltro] = useState<Filtro>('TODOS');
+  const [busca, setBusca] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [confirmarRelatorio, setConfirmarRelatorio] = useState(false);
@@ -78,7 +79,11 @@ export function FormCarga({ cargaId }: { cargaId: number | null }) {
     );
   }
 
-  const visiveis = dados.disponiveis.filter((l) => filtro === 'TODOS' || l.tipo === filtro);
+  // A busca só esconde da lista: lote marcado continua na carga mesmo fora da busca (a contagem avisa).
+  const visiveis = dados.disponiveis.filter(
+    (l) => (filtro === 'TODOS' || l.tipo === filtro) && contemTermos(`OP ${l.op} lote ${l.numero} ${l.corrida}`, busca),
+  );
+  const marcadosEscondidos = escolhidos.filter((l) => !visiveis.some((v) => v.id === l.id)).length;
   const tipos = new Set(escolhidos.map((l) => l.tipo));
   const misturaArk = tipos.has('ARK') && (tipos.has('PIN') || tipos.has('BOX'));
   const totalPecas = escolhidos.reduce((soma, l) => soma + (l.qtd || 0), 0);
@@ -206,6 +211,18 @@ export function FormCarga({ cargaId }: { cargaId: number | null }) {
               ))}
             </div>
           </div>
+          <div className="campo ctt-busca">
+            <label htmlFor="ctt-busca">Buscar lote ou OP</label>
+            <input
+              id="ctt-busca"
+              type="search"
+              placeholder="Nº da OP, do lote ou corrida"
+              autoComplete="off"
+              spellCheck={false}
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </div>
           <p className="dica">
             Marque todos os lotes que vão entrar juntos. Só aparecem lotes que estão na etapa de <strong>tratamento térmico</strong>
             {carga ? ' (e os que já estão nesta carga)' : ''}.
@@ -213,7 +230,11 @@ export function FormCarga({ cargaId }: { cargaId: number | null }) {
           {dados.disponiveis.length === 0 ? (
             <Vazio titulo="Nenhum lote aguardando o tratamento térmico no momento." />
           ) : visiveis.length === 0 ? (
-            <p className="dica">Nenhum lote {filtro} aguardando o tratamento térmico.</p>
+            <p className="dica">
+              {busca.trim()
+                ? `Nenhum lote${filtro === 'TODOS' ? '' : ` ${filtro}`} com essa busca.`
+                : `Nenhum lote ${filtro} aguardando o tratamento térmico.`}
+            </p>
           ) : (
             <ul className="ctt-opcoes">
               {visiveis.map((l) => (
@@ -237,6 +258,8 @@ export function FormCarga({ cargaId }: { cargaId: number | null }) {
           )}
           <p className="nota-discreta" aria-live="polite">
             {inteiro(escolhidos.length)} {escolhidos.length === 1 ? 'lote selecionado' : 'lotes selecionados'} · {pecas(totalPecas)}
+            {marcadosEscondidos > 0 &&
+              ` · ${inteiro(marcadosEscondidos)} ${marcadosEscondidos === 1 ? 'marcado não aparece' : 'marcados não aparecem'} com este filtro`}
           </p>
           {misturaArk && (
             <Faixa tipo="alerta">
