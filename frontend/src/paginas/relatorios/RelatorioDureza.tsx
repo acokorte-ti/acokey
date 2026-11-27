@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Campo } from '../../componentes/Campo';
 import { Cabecalho, Carregando, Faixa } from '../../componentes/Estados';
 import { SeloTipo } from '../../componentes/Selos';
-import { api, enderecoApi, ErroApi, mensagemDeErro } from '../../lib/api';
+import { api, enderecoApi, enviarArquivos, ErroApi, mensagemDeErro } from '../../lib/api';
 import { useAvisos } from '../../lib/avisos';
 import { enterVaiParaProximo } from '../../lib/teclado';
 import { useCarga } from '../../lib/useCarga';
@@ -16,14 +16,19 @@ import {
   SeletorEquipamento,
   SeletorPessoa,
 } from './Comuns';
-import type { RespostaRelatorio, TelaDureza } from './tipos';
+import type { FotoLida, LinhaLidaFoto, RespostaLeituraFoto, RespostaRelatorio, TelaDureza } from './tipos';
 
 const PONTOS = [0, 1, 2, 3, 4];
 
 interface LinhaCP {
   chave: number;
   cp: string;
+  /** "Num. Peça" do papel: qual peça do lote foi medida */
+  peca: string;
   valores: string[];
+  /** Campos que a leitura da foto não conseguiu ler: ficam em vermelho até a pessoa digitar */
+  pecaNaoLida: boolean;
+  naoLidos: boolean[];
 }
 
 type Situacao = 'vazio' | 'ok' | 'fora' | 'invalido';
@@ -40,7 +45,47 @@ function numerosDaLinha(linha: LinhaCP): number[] {
 }
 
 function linhaVazia(op: string, n: number): LinhaCP {
-  return { chave: n, cp: `OP${op}-DUR${n}`, valores: ['', '', '', '', ''] };
+  return { chave: n, cp: `OP${op}-DUR${n}`, peca: '', valores: ['', '', '', '', ''], pecaNaoLida: false, naoLidos: PONTOS.map(() => false) };
+}
+
+function linhaSemNada(linha: LinhaCP): boolean {
+  return !linha.peca.trim() && linha.valores.every((v) => !v.trim());
+}
+
+/** Campos marcados pela leitura da foto que continuam em branco. */
+function camposNaoLidos(linha: LinhaCP): number {
+  const valores = linha.naoLidos.filter((marcado, p) => marcado && !linha.valores[p].trim()).length;
+  return valores + (linha.pecaNaoLida && !linha.peca.trim() ? 1 : 0);
+}
+
+/**
+ * Põe as linhas lidas da foto nas linhas vazias da tabela, na ordem, e cria linhas novas se faltar (até o limite).
+ * Linhas já digitadas não são tocadas: duas fotos (duas folhas) preenchem uma depois da outra.
+ */
+function preencherComFoto(atual: LinhaCP[], lidas: LinhaLidaFoto[], op: string, proximo: number, limite: number) {
+  const linhas = [...atual];
+  let posicao = 0;
+  let n = proximo;
+  let preenchidas = 0;
+  for (const lida of lidas) {
+    while (posicao < linhas.length && !linhaSemNada(linhas[posicao])) posicao += 1;
+    if (posicao >= linhas.length) {
+      if (linhas.length >= limite) break;
+      n += 1;
+      linhas.push(linhaVazia(op, n));
+    }
+    const valores = PONTOS.map((p) => lida.valores[p] ?? '');
+    linhas[posicao] = {
+      ...linhas[posicao],
+      peca: lida.peca,
+      pecaNaoLida: lida.peca_nao_lida,
+      valores,
+      naoLidos: PONTOS.map((p) => Boolean(lida.nao_lidos[p]) && !valores[p]),
+    };
+    posicao += 1;
+    preenchidas += 1;
+  }
+  return { linhas, contador: n, preenchidas, sobraram: lidas.length - preenchidas };
 }
 
 function StatusTexto({ status }: { status: 'APROVADO' | 'REPROVADO' | '' }) {
@@ -55,7 +100,14 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
   const dados = tela.dados;
 
   const [linhas, setLinhas] = useState<LinhaCP[]>([]);
+  const linhasAtuais = useRef<LinhaCP[]>([]);
+  linhasAtuais.current = linhas;
   const contador = useRef(1);
+  const campoFoto = useRef<HTMLInputElement>(null);
+  const [arquivoFoto, setArquivoFoto] = useState<File | null>(null);
+  const [lendoFoto, setLendoFoto] = useState(false);
+  const [resultadoFoto, setResultadoFoto] = useState<{ tipo: 'sucesso' | 'alerta' | 'erro'; texto: string } | null>(null);
+  const [fotos, setFotos] = useState<FotoLida[]>([]);
   const [equipamento, setEquipamento] = useState('');
   const [executor, setExecutor] = useState<number | ''>('');
   const [aprovador, setAprovador] = useState<number | ''>('');
@@ -77,6 +129,10 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
     setData(dados.hoje);
     setDataAprovacao(dados.hoje);
     setErro(null);
+    setFotos([]);
+    setResultadoFoto(null);
+    setArquivoFoto(null);
+    if (campoFoto.current) campoFoto.current.value = '';
   }, [dados]);
 
   const min = dados?.info.esp_min ?? 0;
@@ -101,11 +157,57 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
   if (!dados) return <Carregando />;
   const { lote, info, amostra } = dados;
   const comLeitura = linhas.filter((l) => numerosDaLinha(l).length > 0).length;
+  const naoLidos = linhas.reduce((total, l) => total + camposNaoLidos(l), 0);
 
   function mudarValor(chave: number, ponto: number, valor: string) {
     setLinhas((atual) =>
-      atual.map((l) => (l.chave === chave ? { ...l, valores: l.valores.map((v, i) => (i === ponto ? valor : v)) } : l)),
+      atual.map((l) =>
+        l.chave === chave
+          ? {
+              ...l,
+              valores: l.valores.map((v, i) => (i === ponto ? valor : v)),
+              naoLidos: l.naoLidos.map((m, i) => (i === ponto ? false : m)),
+            }
+          : l,
+      ),
     );
+  }
+
+  function mudarPeca(chave: number, valor: string) {
+    setLinhas((atual) => atual.map((l) => (l.chave === chave ? { ...l, peca: valor, pecaNaoLida: false } : l)));
+  }
+
+  async function lerFoto() {
+    if (!arquivoFoto || lendoFoto) return;
+    setLendoFoto(true);
+    setResultadoFoto(null);
+    try {
+      const resposta = await enviarArquivos<RespostaLeituraFoto>(`/relatorios/dureza/${lote.id}/ler-foto`, { arquivo: arquivoFoto });
+      if (resposta.linhas.length === 0) {
+        setResultadoFoto({ tipo: 'alerta', texto: resposta.aviso || 'Nenhuma linha preenchida foi encontrada na foto.' });
+        return;
+      }
+      // Linhas atuais no momento da resposta: o que foi digitado enquanto a foto era lida não se perde
+      const r = preencherComFoto(linhasAtuais.current, resposta.linhas, lote.op, contador.current, amostra.limite);
+      contador.current = r.contador;
+      setLinhas(r.linhas);
+      setFotos((atual) => [...atual, resposta.foto]);
+      setArquivoFoto(null);
+      if (campoFoto.current) campoFoto.current.value = '';
+      const partes = [r.preenchidas === 1 ? 'Foi preenchida 1 linha com a foto.' : `Foram preenchidas ${r.preenchidas} linhas com a foto.`];
+      partes.push(
+        resposta.nao_lidos === 0
+          ? 'Confira os números com o papel antes de salvar.'
+          : `${resposta.nao_lidos === 1 ? '1 campo não pôde ser lido e está' : `${resposta.nao_lidos} campos não puderam ser lidos e estão`} em vermelho: digite olhando o papel.`,
+      );
+      if (r.sobraram > 0) partes.push(`${r.sobraram} linha(s) da foto não couberam (limite de ${amostra.limite} peças).`);
+      if (resposta.aviso) partes.push(`Observação da leitura: ${resposta.aviso}`);
+      setResultadoFoto({ tipo: resposta.nao_lidos > 0 || r.sobraram > 0 ? 'alerta' : 'sucesso', texto: partes.join(' ') });
+    } catch (falha) {
+      setResultadoFoto({ tipo: 'erro', texto: falha instanceof ErroApi ? falha.message : mensagemDeErro(falha) });
+    } finally {
+      setLendoFoto(false);
+    }
   }
 
   function adicionarLinha() {
@@ -132,7 +234,8 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
       const resposta = await api<RespostaRelatorio>(`/relatorios/dureza/${lote.id}`, {
         metodo: 'POST',
         corpo: {
-          leituras: linhas.map((l) => ({ cp: l.cp, valores: l.valores })),
+          leituras: linhas.map((l) => ({ cp: l.cp, peca: l.peca, valores: l.valores })),
+          fotos,
           equipamento_codigo: equipamento,
           executado_por: executor === '' ? null : executor,
           aprovado_por: aprovador === '' ? null : aprovador,
@@ -232,12 +335,62 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
               </strong>
               . As linhas já vêm prontas. Linha sem leitura não entra no relatório.
             </p>
+            {dados.leitura_foto ? (
+              <div className="rel-foto" role="group" aria-labelledby="titulo-foto">
+                <h3 id="titulo-foto">Preencher pela foto da folha</h3>
+                <p className="dica">
+                  Tire uma foto da folha do RIP-35 preenchida à mão (a tabela inteira, de frente e com boa luz) e envie aqui. O
+                  sistema lê os números e preenche a tabela abaixo. O que não der para ler fica em branco e em vermelho, para
+                  você digitar. A foto fica guardada no lote como anexo interno (não vai para o databook).
+                </p>
+                <div className="rel-foto-acoes">
+                  <input
+                    ref={campoFoto}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                    aria-label="Foto ou PDF da folha do RIP-35"
+                    disabled={lendoFoto}
+                    onChange={(e) => setArquivoFoto(e.target.files?.[0] ?? null)}
+                  />
+                  <button type="button" className="botao" onClick={lerFoto} disabled={!arquivoFoto || lendoFoto}>
+                    {lendoFoto ? 'Lendo a foto…' : 'Ler a foto e preencher'}
+                  </button>
+                </div>
+                {lendoFoto && (
+                  <p className="dica" role="status">
+                    Lendo a foto… pode levar até um minuto.
+                  </p>
+                )}
+                {resultadoFoto && <Faixa tipo={resultadoFoto.tipo}>{resultadoFoto.texto}</Faixa>}
+                {fotos.length > 0 && (
+                  <p className="dica">
+                    Vai junto ao salvar, como anexo interno da etapa:{' '}
+                    {fotos.map((f, i) => (
+                      <span key={f.arquivo} className="chip">
+                        {f.nome}{' '}
+                        <button
+                          type="button"
+                          className="botao-link"
+                          onClick={() => setFotos((atual) => atual.filter((_, j) => j !== i))}
+                          aria-label={`Não anexar a foto ${f.nome}`}
+                        >
+                          não anexar
+                        </button>
+                      </span>
+                    ))}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="dica">A leitura automática da foto da folha não está ligada neste servidor: digite as leituras.</p>
+            )}
             <div className="tabela-rolagem">
               <table className="tabela rel-medicoes">
                 <caption className="so-leitor">Leituras de dureza por corpo de prova</caption>
                 <thead>
                   <tr>
                     <th scope="col">Código do CP</th>
+                    <th scope="col">Nº da peça</th>
                     {PONTOS.map((p) => (
                       <th scope="col" key={p} className="num">
                         Leitura {p + 1}
@@ -257,6 +410,7 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
                   {linhas.map((linha, indice) => {
                     const numeros = numerosDaLinha(linha);
                     const status = numeros.length ? (numeros.every((n) => n >= min && n <= max) ? 'APROVADO' : 'REPROVADO') : '';
+                    const pecaNaoLida = linha.pecaNaoLida && !linha.peca.trim();
                     return (
                       <tr key={linha.chave}>
                         <td>
@@ -268,17 +422,32 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
                             onChange={(e) => setLinhas((atual) => atual.map((l) => (l.chave === linha.chave ? { ...l, cp: e.target.value } : l)))}
                           />
                         </td>
+                        <td>
+                          <input
+                            type="text"
+                            className={`rel-peca ${pecaNaoLida ? 'rel-nao-lida' : ''}`}
+                            aria-label={`Número da peça do corpo de prova ${indice + 1}${pecaNaoLida ? ' (não lido na foto)' : ''}`}
+                            aria-invalid={pecaNaoLida}
+                            title={pecaNaoLida ? 'Não deu para ler na foto: digite olhando o papel.' : undefined}
+                            placeholder={pecaNaoLida ? '?' : 'nº'}
+                            value={linha.peca}
+                            maxLength={20}
+                            onChange={(e) => mudarPeca(linha.chave, e.target.value)}
+                          />
+                        </td>
                         {PONTOS.map((p) => {
                           const situacao = situacaoDaLeitura(linha.valores[p], min, max);
+                          const naoLida = linha.naoLidos[p] && !linha.valores[p].trim();
                           return (
                             <td key={p}>
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                className={`rel-leitura rel-leitura-${situacao}`}
-                                aria-label={`Leitura ${p + 1} do corpo de prova ${indice + 1}`}
-                                aria-invalid={situacao === 'fora' || situacao === 'invalido'}
-                                placeholder="HRc"
+                                className={`rel-leitura ${naoLida ? 'rel-nao-lida' : `rel-leitura-${situacao}`}`}
+                                aria-label={`Leitura ${p + 1} do corpo de prova ${indice + 1}${naoLida ? ' (não lida na foto)' : ''}`}
+                                aria-invalid={naoLida || situacao === 'fora' || situacao === 'invalido'}
+                                title={naoLida ? 'Não deu para ler na foto: digite olhando o papel.' : undefined}
+                                placeholder={naoLida ? '?' : 'HRc'}
                                 value={linha.valores[p]}
                                 maxLength={8}
                                 onChange={(e) => mudarValor(linha.chave, p, e.target.value)}
@@ -319,6 +488,12 @@ export function RelatorioDureza({ loteId }: { loteId: number }) {
               </button>
               <span className="dica">Use para medir mais corpos de prova no mesmo lote.</span>
             </p>
+            {naoLidos > 0 && (
+              <Faixa tipo="alerta">
+                {naoLidos === 1 ? 'Falta 1 campo' : `Faltam ${naoLidos} campos`} em vermelho, que a foto não leu. Digite olhando o
+                papel (campo deixado em branco não entra no relatório).
+              </Faixa>
+            )}
             {geral && comLeitura < amostra.linhas && (
               <Faixa tipo="alerta">
                 Há leitura em {comLeitura} de {amostra.linhas} {amostra.linhas === 1 ? 'peça' : 'peças'} da amostra (10% da{' '}

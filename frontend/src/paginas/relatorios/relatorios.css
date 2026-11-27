@@ -285,3 +285,44 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- leitura da foto da folha (RIP-35 escrito à mão) ---- */
+.rel-foto {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 12px;
+  padding: 12px 14px;
+  border: 1px dashed var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie-2);
+}
+
+.rel-foto h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.rel-foto-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rel-peca {
+  width: 84px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* campo que a foto não leu: em branco e em vermelho até a pessoa digitar */
+.rel-nao-lida {
+  border: 2px solid var(--erro) !important;
+  background: var(--erro-fundo) !important;
+}
+
+.rel-nao-lida::placeholder {
+  color: var(--erro);
+  font-weight: 700;
+  opacity: 1;
+}

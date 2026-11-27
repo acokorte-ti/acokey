@@ -37,6 +37,10 @@ class Config(BaseSettings):
     mega_filial: int = 3  # filial de Itu no Mega
     mega_ops_desde: date = date(2024, 1, 1)  # OPs abertas antes disso não são lidas
 
+    # Leitura da foto do RIP-35 escrito à mão (app/leitura_foto.py). Vazia: a leitura fica desligada.
+    anthropic_api_key: str = ""
+    leitura_foto_modelo: str = "claude-opus-5-5"
+
     @property
     def producao(self) -> bool:
         return self.app_env == "producao"

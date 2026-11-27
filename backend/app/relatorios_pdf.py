@@ -326,8 +326,8 @@ def _gerar(desenhar: Callable[[canvas.Canvas, int | str], None]) -> bytes:
 
 # ---------------------------------------------------------------- Dureza HRC (RIP-35)
 
-COLUNAS_DUREZA = [("Identificação do CP", 0.22), ("P1", 0.09), ("P2", 0.09), ("P3", 0.09), ("P4", 0.09), ("P5", 0.09),
-                  ("Média", 0.11), ("Faixa (mín–máx)", 0.11), ("Status", 0.11)]  # fmt: skip
+COLUNAS_DUREZA = [("Identificação do CP", 0.20), ("Nº Peça", 0.08), ("P1", 0.08), ("P2", 0.08), ("P3", 0.08), ("P4", 0.08),
+                  ("P5", 0.08), ("Média", 0.10), ("Faixa (mín–máx)", 0.11), ("Status", 0.11)]  # fmt: skip
 METODO_PADRAO = "Medição direta, com carga de 150 Kg e Cone de Diamante 120°"
 
 
@@ -341,7 +341,7 @@ def gerar_pdf_dureza(lote: dict, dados: dict, empresa: dict, imagem_pontos: Path
 
     lote: op, lote (número), tipo, coditem.
     dados: cliente, padrao_aceitacao, nome_peca, desenho, material, po, especificacao, esp_min, esp_max,
-        leituras [{cp, valores, status}], equipamento (texto), norma/metodo/preparacao (opcionais),
+        leituras [{cp, peca, valores, status}], equipamento (texto), norma/metodo/preparacao (opcionais),
         inspecionado_por, aprovado_por, data (dd/mm/aaaa = emissão), data_execucao, data_aprovacao,
         assinatura_executado / assinatura_aprovado (Path ou None).
     """
@@ -411,18 +411,20 @@ def gerar_pdf_dureza(lote: dict, dados: dict, empresa: dict, imagem_pontos: Path
             x = X0
             _celula(c, x, y, larguras[0], lin_h, reg.get("cp", ""), tamanho=8.5, alinhar="C", encolher=True)
             x += larguras[0]
+            _celula(c, x, y, larguras[1], lin_h, reg.get("peca", ""), tamanho=8.5, alinhar="C", encolher=True)
+            x += larguras[1]
             for i in range(5):
-                _celula(c, x, y, larguras[i + 1], lin_h, numero_br(valores[i]) if i < len(valores) else "", tamanho=8.5,
+                _celula(c, x, y, larguras[i + 2], lin_h, numero_br(valores[i]) if i < len(valores) else "", tamanho=8.5,
                         alinhar="C")  # fmt: skip
-                x += larguras[i + 1]
+                x += larguras[i + 2]
             media = numero_br(sum(valores) / len(valores)) if valores else "—"
             faixa = f"{numero_br(min(valores))}–{numero_br(max(valores))}" if valores else "—"
-            _celula(c, x, y, larguras[6], lin_h, media, negrito=True, tamanho=8.5, alinhar="C")
-            x += larguras[6]
-            _celula(c, x, y, larguras[7], lin_h, faixa, tamanho=8.5, alinhar="C")
+            _celula(c, x, y, larguras[7], lin_h, media, negrito=True, tamanho=8.5, alinhar="C")
             x += larguras[7]
+            _celula(c, x, y, larguras[8], lin_h, faixa, tamanho=8.5, alinhar="C")
+            x += larguras[8]
             status = reg.get("status", "")
-            _celula(c, x, y, larguras[8], lin_h, status, negrito=True, tamanho=8.5, alinhar="C", cor=_cor_status(status))
+            _celula(c, x, y, larguras[9], lin_h, status, negrito=True, tamanho=8.5, alinhar="C", cor=_cor_status(status))
             y -= lin_h
 
         if todos:  # estatística da amostra: todas as leituras de todas as peças
@@ -430,18 +432,19 @@ def gerar_pdf_dureza(lote: dict, dados: dict, empresa: dict, imagem_pontos: Path
                 y = cabecalho_tabela(nova_pagina())
             geral = calcular_status_dureza(todos, dados.get("esp_min"), dados.get("esp_max"))
             x = X0
-            _celula(c, x, y, larguras[0], lin_h, "Estatística da amostra", negrito=True, tamanho=8.5, fundo=CINZA_FUNDO)
+            _celula(c, x, y, larguras[0], lin_h, "Estatística da amostra", negrito=True, tamanho=8.5, fundo=CINZA_FUNDO,
+                    encolher=True)  # fmt: skip
             x += larguras[0]
-            for lw in larguras[1:6]:
+            for lw in larguras[1:7]:
                 _celula(c, x, y, lw, lin_h, fundo=CINZA_FUNDO)
                 x += lw
-            _celula(c, x, y, larguras[6], lin_h, numero_br(sum(todos) / len(todos)), negrito=True, tamanho=8.5, alinhar="C",
+            _celula(c, x, y, larguras[7], lin_h, numero_br(sum(todos) / len(todos)), negrito=True, tamanho=8.5, alinhar="C",
                     fundo=CINZA_FUNDO)  # fmt: skip
-            x += larguras[6]
-            _celula(c, x, y, larguras[7], lin_h, f"{numero_br(min(todos))}–{numero_br(max(todos))}", negrito=True,
-                    tamanho=8.5, alinhar="C", fundo=CINZA_FUNDO)  # fmt: skip
             x += larguras[7]
-            _celula(c, x, y, larguras[8], lin_h, geral, negrito=True, tamanho=8.5, alinhar="C", cor=_cor_status(geral),
+            _celula(c, x, y, larguras[8], lin_h, f"{numero_br(min(todos))}–{numero_br(max(todos))}", negrito=True,
+                    tamanho=8.5, alinhar="C", fundo=CINZA_FUNDO)  # fmt: skip
+            x += larguras[8]
+            _celula(c, x, y, larguras[9], lin_h, geral, negrito=True, tamanho=8.5, alinhar="C", cor=_cor_status(geral),
                     fundo=CINZA_FUNDO)  # fmt: skip
             y -= lin_h
         y -= 4 * mm

@@ -9,10 +9,13 @@ from conftest import lote_exemplo
 from PIL import Image
 from sqlalchemy import select
 
-from app import fluxo
+from app import fluxo, leitura_foto
 from app.api_relatorios import formatar_laser, formato_legivel, lote_completo
+from app.config import config
+from app.leitura_foto import CelulaLida, ErroLeitura, FolhaLida, LinhaLida
 from app.models import (
     Anexo,
+    Auditoria,
     CargaTT,
     Equipamento,
     EspecificacaoTipo,
@@ -105,7 +108,8 @@ def test_dureza_aprovada_gera_pdf_registro_e_avanca_o_lote(db, base, como, pasta
 
     registro = _ultimo(db, Registro, lote.id, "dureza")
     assert registro.status == "aprovado" and registro.responsavel == "Beltrano Gerente" and registro.usuario_id == gerente
-    assert registro.dados["leituras"] == [{"cp": "OP900001-DUR1", "valores": [36.0, 35.5, 36.0, 34.0], "status": "APROVADO"}]
+    assert registro.dados["leituras"] == [{"cp": "OP900001-DUR1", "peca": "", "valores": [36.0, 35.5, 36.0, 34.0],
+                                           "status": "APROVADO"}]  # fmt: skip
     assert registro.dados["data_aprovacao"] == "25/11/2026" and "assinatura_executado" not in registro.dados
     anexo = _ultimo(db, Anexo, lote.id, "dureza")
     assert anexo.nome == "3-RIP-35-Dureza-OP900001-PIN.pdf" and anexo.arquivo.startswith(f"lotes/{lote.id}/anexos/")
@@ -196,6 +200,94 @@ def test_rip35_traz_a_amostra_de_10_por_cento_do_lote(db, base, como, pasta_arqu
     r = qualidade.post(url, json=_dureza(gerente, gerente) | {"leituras": leituras * 4}, headers={"X-CSRF-Token": csrf})
     assert r.status_code == 422  # acima do limite de 200 linhas
 
+def _folha_lida() -> FolhaLida:
+    """O que a IA devolveria para uma folha com 2 peças, uma delas com um número e o nº da peça ilegíveis."""
+    def c(valor: str, duvida: bool = False) -> CelulaLida:
+        return CelulaLida(valor=valor, duvida=duvida)
+
+    return FolhaLida(e_tabela_de_dureza=True, observacao="Foto um pouco torta.", linhas=[
+        LinhaLida(num_peca=c("17"), leituras=[c("36"), c("35"), c("36"), c("37"), c("36")]),
+        LinhaLida(num_peca=c("", True), leituras=[c("35"), c("", True), c("36"), c("36"), c("36")]),
+    ])  # fmt: skip
+
+
+def test_rip35_le_a_foto_da_folha_e_guarda_a_foto_como_anexo_interno(db, base, como, pasta_arquivos, monkeypatch):
+    lote = lote_exemplo(db, **LOTE_PIN)
+    _aprovados(db, lote, "receb_mp", "trat_termico")
+    qualidade, csrf = como(modulos=["qualidade"], pode_aprovar=True, login="gerente")
+    gerente, cab = _id(db, "gerente"), {"X-CSRF-Token": csrf}
+    url = f"/api/relatorios/dureza/{lote.id}"
+    folha = {"arquivo": ("folha.jpg", _jpg(), "image/jpeg")}
+
+    monkeypatch.setattr(config(), "anthropic_api_key", "")  # sem chave: leitura desligada
+    assert qualidade.get(url).json()["leitura_foto"] is False
+    r = qualidade.post(f"{url}/ler-foto", files=folha, headers=cab)
+    assert r.status_code == 503 and "à mão" in r.json()["detail"]
+
+    monkeypatch.setattr(config(), "anthropic_api_key", "chave-de-teste")
+    enviadas = []
+    monkeypatch.setattr(leitura_foto, "chamar_ia", lambda imagens: enviadas.append(imagens) or _folha_lida())
+    assert qualidade.get(url).json()["leitura_foto"] is True
+    r = qualidade.post(f"{url}/ler-foto", files=folha, headers=cab)
+    assert r.status_code == 200, r.text
+    lido = r.json()
+    assert lido["linhas"][0] == {"peca": "17", "peca_nao_lida": False, "valores": ["36", "35", "36", "37", "36"],
+                                 "nao_lidos": [False] * 5}  # fmt: skip
+    assert lido["linhas"][1]["peca_nao_lida"] is True and lido["linhas"][1]["nao_lidos"] == [False, True, False, False, False]
+    assert lido["nao_lidos"] == 2 and lido["aviso"] == "Foto um pouco torta."
+    assert len(enviadas) == 1 and enviadas[0][0][:2] == b"\xff\xd8"  # vai como JPEG
+    foto = lido["foto"]
+    assert foto["nome"] == "folha.jpg" and foto["arquivo"].startswith(f"lotes/{lote.id}/fotos_dureza/")
+    assert (pasta_arquivos / foto["arquivo"]).is_file()
+    db.expire_all()
+    auditoria = db.scalar(select(Auditoria).where(Auditoria.acao == "LER_FOTO"))
+    assert auditoria.lote_id == lote.id and auditoria.detalhes["nao_lidos"] == 2 and auditoria.detalhes["linhas"] == 2
+    assert _ultimo(db, Registro, lote.id, "dureza") is None  # ler a foto não grava nada no lote
+
+    leituras = [{"cp": "", "peca": "17", "valores": lido["linhas"][0]["valores"]},
+                {"cp": "", "peca": "21", "valores": ["35", "36", "36", "36", "36"]}]  # fmt: skip
+    r = qualidade.post(url, json=_dureza(gerente, gerente) | {"leituras": leituras, "fotos": [foto, foto]}, headers=cab)
+    assert r.status_code == 200, r.text
+    registro = _ultimo(db, Registro, lote.id, "dureza")
+    assert [(item["cp"], item["peca"]) for item in registro.dados["leituras"]] == [("OP900001-DUR1", "17"), ("OP900001-DUR2", "21")]
+    anexos = db.scalars(select(Anexo).where(Anexo.lote_id == lote.id, Anexo.etapa == "dureza").order_by(Anexo.id)).all()
+    assert [(a.nome, a.apenas_registro) for a in anexos] == [("3-RIP-35-Dureza-OP900001-PIN.pdf", False),
+                                                             ("Foto do RIP-35 em papel - folha.jpg", True)]  # fmt: skip
+    assert anexos[1].arquivo == foto["arquivo"]
+    with pymupdf.open(stream=(pasta_arquivos / anexos[0].arquivo).read_bytes(), filetype="pdf") as doc:
+        palavras = doc[0].get_text("words")
+    cabecalho = next(p for p in palavras if p[4] == "Peça" and any(q[4] == "Nº" and abs(q[1] - p[1]) < 2 for q in palavras))
+    coluna = [p[4] for p in palavras if p[0] >= cabecalho[0] - 15 and p[2] <= cabecalho[2] + 15 and p[1] > cabecalho[3]]
+    assert coluna[:2] == ["17", "21"]
+
+    for arquivo in (f"lotes/{lote.id + 1}/fotos_dureza/x.jpg", f"lotes/{lote.id}/fotos_dureza/../anexos/x.pdf",
+                    f"lotes/{lote.id}/fotos_dureza/nao-existe.jpg", anexos[0].arquivo):  # fmt: skip
+        r = qualidade.post(url, json=_dureza(gerente, gerente, "36") | {"fotos": [{"arquivo": arquivo}]}, headers=cab)
+        assert r.status_code == 422 and "foto da folha" in r.json()["detail"], arquivo
+
+
+def test_rip35_foto_que_nao_e_a_tabela_e_falha_da_leitura(db, base, como, monkeypatch):
+    lote = lote_exemplo(db, **LOTE_PIN)
+    qualidade, csrf = como(modulos=["qualidade"], login="inspetor")
+    url = f"/api/relatorios/dureza/{lote.id}/ler-foto"
+    folha = {"arquivo": ("folha.png", _png(), "image/png")}
+    monkeypatch.setattr(config(), "anthropic_api_key", "chave-de-teste")
+
+    monkeypatch.setattr(leitura_foto, "chamar_ia", lambda _: FolhaLida(e_tabela_de_dureza=False, linhas=[], observacao=""))
+    r = qualidade.post(url, files=folha, headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 200 and r.json()["linhas"] == [] and "não parece ser a tabela" in r.json()["aviso"]
+
+    def demora(_):
+        raise ErroLeitura("A leitura demorou demais. Tente de novo ou preencha à mão.", 504)
+
+    monkeypatch.setattr(leitura_foto, "chamar_ia", demora)
+    r = qualidade.post(url, files=folha, headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 504 and "demorou demais" in r.json()["detail"]
+    planilha = {"arquivo": ("folha.xlsx", b"PK", "application/octet-stream")}
+    r = qualidade.post(url, files=planilha, headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 422
+
+
 def test_rip35_do_ark_usa_a_faixa_do_ark_e_sai_sem_figura(db, base, como):
     """Dureza é opcional no ARK: o RIP-35 sai com a faixa do ARK; sem a imagem dos pontos no servidor, sem a figura."""
     ark = lote_exemplo(db, numero="26-4-900002", op="900002", tipo="ARK")
@@ -272,6 +364,8 @@ def test_dureza_e_visual_so_para_a_qualidade(db, base, como):
     cab = {"X-CSRF-Token": csrf}
     assert tt.get(f"/api/relatorios/dureza/{lote.id}").status_code == 403
     assert tt.post(f"/api/relatorios/dureza/{lote.id}", json=_dureza(1, 1, "36"), headers=cab).status_code == 403
+    assert tt.post(f"/api/relatorios/dureza/{lote.id}/ler-foto", files={"arquivo": ("folha.jpg", _jpg(), "image/jpeg")},
+                   headers=cab).status_code == 403  # fmt: skip
     assert tt.get(f"/api/relatorios/visual/{lote.id}").status_code == 403
     assert tt.post(f"/api/relatorios/visual/{lote.id}", data={"qtd": "1"}, headers=cab).status_code == 403
     usinagem, csrf = como(modulos=["producao_usinagem"], login="usinagem")

@@ -387,7 +387,8 @@ def corrigir_dureza(registro_id: int, corpo: CorrecaoDureza, ctx: Contexto = Dep
         if not valores:
             continue  # CP sem nenhuma leitura sai da lista (como no sistema antigo)
         cp = _texto(enviada.cp) or atual["cp"] or f"OP{lote.op}-DUR{indice}"
-        novas.append({"cp": cp, "valores": valores, "status": status_dureza(valores, esp_min, esp_max)})
+        novas.append({"cp": cp, "peca": atual.get("peca", ""), "valores": valores,
+                      "status": status_dureza(valores, esp_min, esp_max)})  # fmt: skip
     if not novas:
         raise HTTPException(422, "Informe pelo menos uma leitura.")
 

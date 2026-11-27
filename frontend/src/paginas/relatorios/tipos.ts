@@ -62,6 +62,8 @@ export interface TelaDureza {
   tem_imagem_pontos: boolean;
   /** Linhas que o RIP-35 traz prontas: 10% das peças do lote (base "lote"); a da OP ("op") só se o lote não tiver quantidade. */
   amostra: { qtd: number; base: 'op' | 'lote'; linhas: number; limite: number };
+  /** Leitura automática da foto da folha (RIP-35 escrito à mão) ligada no servidor. */
+  leitura_foto: boolean;
   durometros: Equipamento[];
   executores: Pessoa[];
   aprovadores: Pessoa[];
@@ -69,6 +71,27 @@ export interface TelaDureza {
   carga: { id: number; numero: string } | null;
   carga_outros_lotes: (LoteBasico & { ja_feito: boolean })[];
   hoje: string;
+}
+
+/** Uma linha lida da foto da folha. O que não deu para ler volta vazio e marcado (nao_lidos / peca_nao_lida). */
+export interface LinhaLidaFoto {
+  peca: string;
+  peca_nao_lida: boolean;
+  valores: string[];
+  nao_lidos: boolean[];
+}
+
+/** Foto já gravada no servidor; vai junto ao salvar o RIP-35 e vira anexo interno da etapa. */
+export interface FotoLida {
+  arquivo: string;
+  nome: string;
+}
+
+export interface RespostaLeituraFoto {
+  linhas: LinhaLidaFoto[];
+  nao_lidos: number;
+  aviso: string;
+  foto: FotoLida;
 }
 
 // ---------------------------------------------------------------- tratamento térmico

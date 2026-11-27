@@ -27,7 +27,10 @@ def numero(valor: Any) -> float | None:
 
 
 def extrair_leituras(dados: Any) -> list[dict]:
-    """Normaliza as leituras de qualquer registro de dureza para [{"cp", "valores": [float], "status"}]."""
+    """Normaliza as leituras de qualquer registro de dureza para [{"cp", "peca", "valores": [float], "status"}].
+
+    "peca" (o "Num. Peça" do papel) só existe nos RIP-35 gravados a partir de 26/11/2026; nos outros vem "".
+    """
     if not isinstance(dados, dict):
         return []
     leituras = dados.get("leituras")
@@ -37,7 +40,8 @@ def extrair_leituras(dados: Any) -> list[dict]:
             if not isinstance(item, dict):
                 continue
             valores = [v for v in (numero(x) for x in item.get("valores") or []) if v is not None]
-            saida.append({"cp": str(item.get("cp") or "").strip(), "valores": valores, "status": str(item.get("status") or "")})
+            saida.append({"cp": str(item.get("cp") or "").strip(), "peca": str(item.get("peca") or "").strip(),
+                          "valores": valores, "status": str(item.get("status") or "")})  # fmt: skip
         return saida
     relatorio = dados.get("report") if isinstance(dados.get("report"), dict) else {}
     for tabela in relatorio.get("tabelas") or []:
@@ -53,7 +57,7 @@ def extrair_leituras(dados: Any) -> list[dict]:
                 valor = numero(linha[1])
                 if valor is not None:
                     por_peca[peca].append(valor)
-        return [{"cp": peca, "valores": valores, "status": ""} for peca, valores in por_peca.items()]
+        return [{"cp": peca, "peca": "", "valores": valores, "status": ""} for peca, valores in por_peca.items()]
     return []
 
 
@@ -75,5 +79,6 @@ def texto_leituras(leituras: list[dict]) -> str:
     partes = []
     for item in leituras:
         valores = " / ".join(formatar(v).replace(".", ",") for v in item.get("valores") or [])
-        partes.append(f"{item.get('cp') or 'CP'}: {valores or '—'}")
+        peca = f" (peça {item['peca']})" if item.get("peca") else ""
+        partes.append(f"{item.get('cp') or 'CP'}{peca}: {valores or '—'}")
     return "; ".join(partes)

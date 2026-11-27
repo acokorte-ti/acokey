@@ -193,7 +193,7 @@ def _corrigir(cliente, csrf, registro_id, leituras, nc_id=None):
 
 def test_corrigir_dureza_que_fica_aprovada_encerra_a_nc(como, db):
     _spec_pin(db)
-    dados = {"leituras": [{"cp": "OP900001-DUR1", "valores": [2.5, 36, 35], "status": "REPROVADO"},
+    dados = {"leituras": [{"cp": "OP900001-DUR1", "peca": "17", "valores": [2.5, 36, 35], "status": "REPROVADO"},
                           {"cp": "OP900001-DUR2", "valores": [34, 35], "status": "APROVADO"}]}  # fmt: skip
     lote, registro, nc = _nc(db, dados=dados)
     qualidade, csrf = como(modulos=["qualidade"])
@@ -226,8 +226,9 @@ def test_corrigir_dureza_que_fica_aprovada_encerra_a_nc(como, db):
     db.expire_all()
     reg = db.get(Registro, registro.id)
     assert reg.status == "aprovado" and reg.dados["leituras"][0]["valores"] == [35.5, 36, 35] and reg.dados["corrigido_por"]
+    assert [lt["peca"] for lt in reg.dados["leituras"]] == ["17", ""]  # o nº da peça não se perde na correção
     nc_db = db.get(NaoConformidade, nc.id)
-    assert nc_db.status == "encerrada" and nc_db.disposicao == "anulada" and "Antes: OP900001-DUR1: 25,5" in nc_db.observacoes
+    assert nc_db.status == "encerrada" and nc_db.disposicao == "anulada" and "Antes: OP900001-DUR1 (peça 17): 25,5" in nc_db.observacoes
     assert estado_lotes(db, [lote.id])[0][lote.id][("dureza", "")].resolvida
     correcoes = _auditoria(db, "CORRIGIR", "registro")
     assert correcoes[0].detalhes["antes"]["leituras"][0]["valores"] == [2.5, 36, 35]  # o valor de antes fica guardado
@@ -244,7 +245,8 @@ def test_corrigir_dureza_no_formato_antigo_do_relatorio(como, db):
     _, registro, nc = _nc(db, dados=dados)
     aprovador, csrf = como(modulos=["qualidade"], pode_aprovar=True)
     tela = aprovador.get(f"/api/registros/{registro.id}/corrigir-dureza").json()
-    assert tela["leituras"] == [{"cp": "P1", "valores": [3.6, 36.0], "status": ""}, {"cp": "P2", "valores": [35.0], "status": ""}]
+    assert tela["leituras"] == [{"cp": "P1", "peca": "", "valores": [3.6, 36.0], "status": ""},
+                                {"cp": "P2", "peca": "", "valores": [35.0], "status": ""}]  # fmt: skip
     r = _corrigir(aprovador, csrf, registro.id, [{"cp": "P1", "valores": ["36", "36"]}, {"cp": "P2", "valores": ["35"]}])
     assert r.status_code == 200 and r.json()["status"] == "aprovado"
     db.expire_all()

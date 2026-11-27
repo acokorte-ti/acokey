@@ -21,9 +21,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import fluxo, parametros
+from app import fluxo, leitura_foto, parametros
 from app.api_cargas_tt import aguardando_tt, carga_ativa_do_lote, lotes_das_cargas
-from app.arquivos import IMAGENS, caminho_seguro, salvar_bytes, salvar_upload
+from app.arquivos import DOCUMENTOS, IMAGENS, caminho_seguro, salvar_bytes, salvar_upload
 from app.config import agora_local
 from app.db import get_db
 from app.estado import ultimos_registros
@@ -205,6 +205,7 @@ def tela_dureza(lote_id: int, ctx: Contexto = Depends(QUALIDADE), db: Session = 
         "imagem_pontos": imagem,
         "tem_imagem_pontos": caminho_seguro(f"recursos/relatorios/{imagem}") is not None,
         "amostra": amostra_dureza(db, lote) | {"limite": LIMITE_CPS_DUREZA},
+        "leitura_foto": leitura_foto.disponivel(),
         "durometros": [equipamento_dict(e) for e in durometros(db)],
         "executores": executores(db, ctx, MODULOS_QUALIDADE),
         "aprovadores": aprovadores(db),
@@ -217,16 +218,70 @@ def tela_dureza(lote_id: int, ctx: Contexto = Depends(QUALIDADE), db: Session = 
 
 class LeituraCP(BaseModel):
     cp: str = Field("", max_length=60)
+    peca: str = Field("", max_length=20)  # "Num. Peça" do papel: qual peça do lote foi medida
     valores: list[str | float | None] = Field(default_factory=list, max_length=5)
+
+
+class FotoLida(BaseModel):
+    """Foto da folha de papel já gravada por /ler-foto; ao salvar o relatório vira anexo interno da etapa."""
+
+    arquivo: str = Field(..., max_length=400)
+    nome: str = Field("", max_length=255)
 
 
 class DurezaEntrada(BaseModel):
     leituras: list[LeituraCP] = Field(..., max_length=LIMITE_CPS_DUREZA)
+    fotos: list[FotoLida] = Field(default_factory=list, max_length=5)
     equipamento_codigo: str = Field("", max_length=30)
     executado_por: int | None = None
     aprovado_por: int | None = None
     data: date | None = None
     data_aprovacao: date | None = None
+
+
+PASTA_FOTOS_DUREZA = "lotes/{id}/fotos_dureza"
+
+
+def _foto_lida(lote: Lote, foto: FotoLida) -> tuple[str, str]:
+    """(caminho, nome do anexo) de uma foto gravada por /ler-foto NESTE lote; 422 se não for."""
+    pasta = PASTA_FOTOS_DUREZA.format(id=lote.id) + "/"
+    relativo = foto.arquivo.strip().replace("\\", "/")
+    if not relativo.startswith(pasta) or "/" in relativo[len(pasta):] or caminho_seguro(relativo) is None:
+        raise HTTPException(422, "A foto da folha não foi encontrada. Leia a foto de novo ou salve sem ela.")
+    nome = _texto(foto.nome, 200) or relativo.rsplit("/", 1)[-1]
+    return relativo, f"Foto do RIP-35 em papel - {nome}"
+
+
+@rota.post("/relatorios/dureza/{lote_id}/ler-foto")
+def ler_foto_dureza(lote_id: int, arquivo: UploadFile = File(...), ctx: Contexto = Depends(QUALIDADE),
+                    db: Session = Depends(get_db)) -> dict:  # fmt: skip
+    """Lê a tabela escrita à mão na foto do RIP-35 e devolve as linhas para a tela (nada vai para o registro aqui).
+
+    A foto fica gravada na pasta do lote; vira anexo interno da etapa quando o relatório for salvo com ela.
+    """
+    lote = buscar_lote(db, lote_id)
+    _info_dureza(db, lote)  # 422 se o RIP-35 não se aplica ao lote
+    if not leitura_foto.disponivel():
+        raise HTTPException(503, "A leitura automática da foto não está ligada neste servidor. Preencha a tabela à mão.")
+    relativo, nome = salvar_upload(arquivo, PASTA_FOTOS_DUREZA.format(id=lote.id), DOCUMENTOS)
+    caminho = caminho_seguro(relativo)
+    db.commit()  # nada pendente: só devolve a conexão ao pool enquanto a IA lê (até 100 s)
+    try:
+        imagens = leitura_foto.preparar_imagens(caminho.read_bytes(), caminho.suffix.lower())
+        folha = leitura_foto.chamar_ia(imagens)
+    except leitura_foto.ErroLeitura as erro:
+        raise HTTPException(erro.status, str(erro)) from erro
+    linhas = leitura_foto.normalizar(folha) if folha.e_tabela_de_dureza else []
+    nao_lidos = sum(sum(linha["nao_lidos"]) + linha["peca_nao_lida"] for linha in linhas)
+    auditar(db, ctx, "LER_FOTO", "lote", lote.id, {"etapa": "dureza", "arquivo": nome, "paginas": len(imagens),
+                                                  "linhas": len(linhas), "nao_lidos": nao_lidos}, lote_id=lote.id)  # fmt: skip
+    db.commit()
+    aviso = folha.observacao.strip()[:300]
+    if not folha.e_tabela_de_dureza:
+        aviso = "A foto não parece ser a tabela de medições do RIP-35." + (f" {aviso}" if aviso else "")
+    elif not linhas:
+        aviso = "Nenhuma linha preenchida foi encontrada na foto." + (f" {aviso}" if aviso else "")
+    return {"linhas": linhas, "nao_lidos": nao_lidos, "aviso": aviso, "foto": {"arquivo": relativo, "nome": nome}}
 
 
 @rota.post("/relatorios/dureza/{lote_id}")
@@ -239,7 +294,8 @@ def gerar_dureza(lote_id: int, entrada: DurezaEntrada, ctx: Contexto = Depends(Q
         if not valores:
             continue  # linha sem leitura é ignorada, como no antigo
         cp = _texto(linha.cp, 60) or f"OP{lote.op}-DUR{indice}"
-        leituras.append({"cp": cp, "valores": valores, "status": calcular_status_dureza(valores, info["esp_min"], info["esp_max"])})
+        leituras.append({"cp": cp, "peca": _texto(linha.peca, 20), "valores": valores,
+                         "status": calcular_status_dureza(valores, info["esp_min"], info["esp_max"])})  # fmt: skip
         todos.extend(valores)
     if not leituras:
         raise HTTPException(422, "Informe pelo menos uma leitura de dureza.")
@@ -248,6 +304,7 @@ def gerar_dureza(lote_id: int, entrada: DurezaEntrada, ctx: Contexto = Depends(Q
         raise HTTPException(422, "Escolha o durômetro usado no ensaio (cadastro de equipamentos).")
     executor = buscar_executor(db, _id(entrada.executado_por))
     aprovador = buscar_aprovador(db, _id(entrada.aprovado_por))
+    fotos = list(dict.fromkeys(_foto_lida(lote, foto) for foto in entrada.fotos))
     status = calcular_status_dureza(todos, info["esp_min"], info["esp_max"])
     data_txt = data_br(entrada.data or agora_local().date())
     data_aprov = data_br(entrada.data_aprovacao) or data_txt
@@ -276,6 +333,14 @@ def gerar_dureza(lote_id: int, entrada: DurezaEntrada, ctx: Contexto = Depends(Q
     reg_status = "aprovado" if status == "APROVADO" else "reprovado"
     registro, anexo = _gravar(db, ctx, lote, "dureza", reg_status, dados, pdf, f"3-RIP-35-Dureza-OP{lote.op}-{lote.tipo}.pdf",
                               f"Relatório de Dureza gerado pelo sistema (RIP-35) - {status}")  # fmt: skip
+    for relativo, nome in fotos:
+        foto = Anexo(lote_id=lote.id, etapa="dureza", sub="", nome=nome, arquivo=relativo, quando=registro.quando,
+                     apenas_registro=True)  # fmt: skip
+        db.add(foto)
+        db.flush()
+        auditar(db, ctx, "CRIAR", "anexo", foto.id, {"etapa": "dureza", "nome": nome, "apenas_registro": True,
+                                                     "via": "foto lida no RIP-35", "registro_id": registro.id},
+                lote_id=lote.id)  # fmt: skip
     nc = None
     if reg_status == "reprovado":
         nc = abrir_nc_automatica(db, ctx, lote, registro,

@@ -235,3 +235,16 @@ Socorro, quando ninguém consegue entrar:
 docker compose exec api python -m app.admin desbloquear LOGIN
 docker compose exec api python -m app.admin senha-provisoria LOGIN
 ```
+
+## Leitura da foto do RIP-35 (IA da Anthropic)
+
+No Relatório de Dureza, "Preencher pela foto da folha" lê a tabela escrita à mão no RIP-35 de papel (foto JPG/PNG
+ou PDF digitalizado, até 3 páginas) e preenche o Nº da peça e as 5 leituras de cada linha. O que o modelo não lê
+com certeza volta em branco e em vermelho para a pessoa digitar: nada é "adivinhado", e a especificação não é
+enviada (para não puxar a leitura para dentro da faixa). A foto vira anexo interno da etapa (fora do databook) ao
+salvar o relatório. Código e regras: `backend/app/leitura_foto.py`.
+
+A foto **sai da empresa** (vai para a API da Anthropic; o cabeçalho do papel tem o nome do cliente), decisão tomada
+com a Qualidade. Ligar: `ANTHROPIC_API_KEY=...` no `.env` do servidor (chave criada no console da Anthropic, com
+limite de gasto) e `docker compose up -d api`. Sem a chave, o bloco aparece como desligado e a tabela é digitada.
+Cada leitura fica na auditoria (`LER_FOTO`, com o lote e quantos campos não foram lidos).
